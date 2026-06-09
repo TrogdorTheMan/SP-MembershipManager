@@ -1,0 +1,11 @@
+# Build output
+build/output/
+
+# Logs
+logs/
+
+# PowerShell temp files
+*.ps1xml
+
+# VS Code
+.vscode/
