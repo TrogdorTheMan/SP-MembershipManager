@@ -155,15 +155,47 @@ function Get-AllSites {
 
 function Search-Users {
     param([string]$Query)
-    # Use Graph /users with $search -- requires ConsistencyLevel: eventual header.
-    # Works with app-only cert auth; Submit-PnPSearchQuery requires a user context.
-    $url = "users?`$search=`"displayName:$Query`"&`$select=displayName,mail,userPrincipalName&`$top=20&`$count=true"
-    $response = Invoke-PnPGraphMethod -Url $url -Method Get -AdditionalHeaders @{ "ConsistencyLevel" = "eventual" }
-    $users = foreach ($u in $response.value) {
-        [PSCustomObject]@{
-            DisplayName = $u.displayName
-            Email       = if ($u.mail) { $u.mail } else { $u.userPrincipalName }
-            Account     = $u.userPrincipalName
+    # If query looks like an email address use $filter on mail/UPN (no special headers needed).
+    # Otherwise use $search on displayName with ConsistencyLevel: eventual, with an email-prefix
+    # fallback so that "jdoe" also finds "jdoe@domain.com" when display name search returns nothing.
+    if ($Query -match '@') {
+        # Use the local part (before @) for a flexible prefix match on mail/UPN.
+        # This way "tim@" finds "jdoe@domain.com", "janet@domain.com", etc.
+        $localPart = $Query.Split('@')[0]
+        $encoded = [Uri]::EscapeDataString($localPart)
+        $url = "users?`$filter=startswith(mail,'$encoded') or startswith(userPrincipalName,'$encoded')&`$select=displayName,mail,userPrincipalName&`$top=20"
+        $response = Invoke-PnPGraphMethod -Url $url -Method Get
+        $users = @(foreach ($u in $response.value) {
+            [PSCustomObject]@{
+                DisplayName = $u.displayName
+                Email       = if ($u.mail) { $u.mail } else { $u.userPrincipalName }
+                Account     = $u.userPrincipalName
+            }
+        })
+    } else {
+        # Display name search (handles "Jane Doe", "Jane", etc.)
+        $url = "users?`$search=`"displayName:$Query`"&`$select=displayName,mail,userPrincipalName&`$top=20&`$count=true"
+        $response = Invoke-PnPGraphMethod -Url $url -Method Get -AdditionalHeaders @{ "ConsistencyLevel" = "eventual" }
+        $users = @(foreach ($u in $response.value) {
+            [PSCustomObject]@{
+                DisplayName = $u.displayName
+                Email       = if ($u.mail) { $u.mail } else { $u.userPrincipalName }
+                Account     = $u.userPrincipalName
+            }
+        })
+        # Fallback: if display name found nothing, try the query as an email prefix.
+        # This catches cases like "jdoe" matching "jdoe@contoso.com".
+        if ($users.Count -eq 0) {
+            $encoded = [Uri]::EscapeDataString($Query)
+            $url2 = "users?`$filter=startswith(mail,'$encoded') or startswith(userPrincipalName,'$encoded')&`$select=displayName,mail,userPrincipalName&`$top=20"
+            $response2 = Invoke-PnPGraphMethod -Url $url2 -Method Get
+            $users = @(foreach ($u in $response2.value) {
+                [PSCustomObject]@{
+                    DisplayName = $u.displayName
+                    Email       = if ($u.mail) { $u.mail } else { $u.userPrincipalName }
+                    Account     = $u.userPrincipalName
+                }
+            })
         }
     }
     return $users | Where-Object { $_.Email }
@@ -332,6 +364,58 @@ function Show-AboutDialog {
     if ($Owner) { [void]$about.ShowDialog($Owner) } else { [void]$about.ShowDialog() }
 }
 
+function Show-LoadingForm {
+    param([string]$AdminUrl)
+
+    Add-Type -AssemblyName System.Windows.Forms
+    Add-Type -AssemblyName System.Drawing
+
+    $loading = New-Object System.Windows.Forms.Form
+    $loading.Text            = "SP Membership Manager"
+    $loading.Size            = New-Object System.Drawing.Size(320, 148)
+    $loading.FormBorderStyle = 'FixedDialog'
+    $loading.StartPosition   = 'CenterScreen'
+    $loading.MaximizeBox     = $false
+    $loading.MinimizeBox     = $false
+    $loading.ControlBox      = $false
+
+    $lblTitle = New-Object System.Windows.Forms.Label
+    $lblTitle.Text     = "SP Membership Manager"
+    $lblTitle.Font     = New-Object System.Drawing.Font('Segoe UI', 10, [System.Drawing.FontStyle]::Bold)
+    $lblTitle.Location = New-Object System.Drawing.Point(20, 20)
+    $lblTitle.AutoSize = $true
+
+    $lblStatus = New-Object System.Windows.Forms.Label
+    $lblStatus.Text      = "Connecting to tenant..."
+    $lblStatus.Location  = New-Object System.Drawing.Point(20, 54)
+    $lblStatus.Size      = New-Object System.Drawing.Size(270, 20)
+    $lblStatus.ForeColor = [System.Drawing.Color]::DimGray
+
+    $progress = New-Object System.Windows.Forms.ProgressBar
+    $progress.Location              = New-Object System.Drawing.Point(20, 84)
+    $progress.Size                  = New-Object System.Drawing.Size(270, 16)
+    $progress.Style                 = 'Marquee'
+    $progress.MarqueeAnimationSpeed = 30
+
+    $loading.Controls.AddRange(@($lblTitle, $lblStatus, $progress))
+    $loading.Show()
+    [System.Windows.Forms.Application]::DoEvents()
+
+    try {
+        Connect-Tenant -AdminUrl $AdminUrl
+        $lblStatus.Text = "Loading site list..."
+        [System.Windows.Forms.Application]::DoEvents()
+        $sites = Get-AllSites
+        $loading.Close()
+        $loading.Dispose()
+        return $sites
+    } catch {
+        $loading.Close()
+        $loading.Dispose()
+        throw
+    }
+}
+
 function Show-AdminUrlDialog {
     Add-Type -AssemblyName System.Windows.Forms
     Add-Type -AssemblyName System.Drawing
@@ -386,7 +470,10 @@ function Show-AdminUrlDialog {
 }
 
 function Show-MainForm {
-    param([string]$AdminUrl)
+    param(
+        [string]$AdminUrl,
+        [array]$PreloadedSites = $null
+    )
 
     Add-Type -AssemblyName System.Windows.Forms
     Add-Type -AssemblyName System.Drawing
@@ -421,13 +508,19 @@ function Show-MainForm {
 
     $txtSearch            = New-Object System.Windows.Forms.TextBox
     $txtSearch.Location   = New-Object System.Drawing.Point(12, 60)
-    $txtSearch.Size       = New-Object System.Drawing.Size(230, 23)
+    $txtSearch.Size       = New-Object System.Drawing.Size(190, 23)
     $txtSearch.PlaceholderText = "Name or email..."
 
     $btnSearch            = New-Object System.Windows.Forms.Button
     $btnSearch.Text       = "Search"
-    $btnSearch.Location   = New-Object System.Drawing.Point(248, 59)
-    $btnSearch.Size       = New-Object System.Drawing.Size(75, 25)
+    $btnSearch.Location   = New-Object System.Drawing.Point(208, 59)
+    $btnSearch.Size       = New-Object System.Drawing.Size(65, 25)
+
+    $btnRefreshSearch     = New-Object System.Windows.Forms.Button
+    $btnRefreshSearch.Text    = "↻"
+    $btnRefreshSearch.Location = New-Object System.Drawing.Point(279, 59)
+    $btnRefreshSearch.Size    = New-Object System.Drawing.Size(30, 25)
+    $btnRefreshSearch.Enabled = $false
 
     $lstUsers             = New-Object System.Windows.Forms.ListBox
     $lstUsers.Location    = New-Object System.Drawing.Point(12, 92)
@@ -480,6 +573,12 @@ function Show-MainForm {
     $btnRemove.Size       = New-Object System.Drawing.Size(130, 30)
     $btnRemove.Enabled    = $false
 
+    $btnRefreshSites      = New-Object System.Windows.Forms.Button
+    $btnRefreshSites.Text     = "↻ Refresh"
+    $btnRefreshSites.Location = New-Object System.Drawing.Point(604, 400)
+    $btnRefreshSites.Size     = New-Object System.Drawing.Size(85, 30)
+    $btnRefreshSites.Enabled  = $false
+
     $btnAbout             = New-Object System.Windows.Forms.Button
     $btnAbout.Text        = "About"
     $btnAbout.Location    = New-Object System.Drawing.Point(897, 400)
@@ -505,9 +604,9 @@ function Show-MainForm {
 
     # Add controls
     $form.Controls.AddRange(@(
-        $lblSignedIn, $lblSearch, $txtSearch, $btnSearch, $lstUsers,
+        $lblSignedIn, $lblSearch, $txtSearch, $btnSearch, $btnRefreshSearch, $lstUsers,
         $divider, $lblSites, $lblSelectedUser, $dgv,
-        $btnAdd, $btnRemove, $btnAbout, $rtbLog, $status
+        $btnAdd, $btnRemove, $btnRefreshSites, $btnAbout, $rtbLog, $status
     ))
 
     # Helper: update status bar and log
@@ -528,19 +627,26 @@ function Show-MainForm {
         }
     }
 
-    # On load: connect and pre-load sites
+    # On load: use pre-loaded sites if available (from loading screen), otherwise connect fresh.
     $form.Add_Load({
-        & $SetStatus "Connecting to tenant..."
-        try {
-            Connect-Tenant -AdminUrl $AdminUrl
-            $lblSignedIn.Text = "Connected to: $AdminUrl"
-            & $SetStatus "Loading site list..."
-            $script:AllSites = Get-AllSites
+        if ($null -ne $PreloadedSites) {
+            $script:AllSites      = $PreloadedSites
+            $lblSignedIn.Text     = "Connected to: $AdminUrl"
             & $SetStatus "Ready. Search for an employee to manage their site access."
             $btnAdd.Enabled = $false
-        } catch {
-            & $SetStatus "Connection failed: $_"
-            [System.Windows.Forms.MessageBox]::Show("Could not connect:`n$_", "Error", 'OK', 'Error') | Out-Null
+        } else {
+            & $SetStatus "Connecting to tenant..."
+            try {
+                Connect-Tenant -AdminUrl $AdminUrl
+                $lblSignedIn.Text = "Connected to: $AdminUrl"
+                & $SetStatus "Loading site list..."
+                $script:AllSites = Get-AllSites
+                & $SetStatus "Ready. Search for an employee to manage their site access."
+                $btnAdd.Enabled = $false
+            } catch {
+                & $SetStatus "Connection failed: $_"
+                [System.Windows.Forms.MessageBox]::Show("Could not connect:`n$_", "Error", 'OK', 'Error') | Out-Null
+            }
         }
     })
 
@@ -562,6 +668,7 @@ function Show-MainForm {
             }
             $count = $script:UserResults.Count
             & $SetStatus "$count user(s) found. Select one to view their site access."
+            $btnRefreshSearch.Enabled = ($count -gt 0)
         } catch {
             & $SetStatus "Search failed: $_"
             [System.Windows.Forms.MessageBox]::Show($_.ToString(), "Error", 'OK', 'Error') | Out-Null
@@ -592,7 +699,8 @@ function Show-MainForm {
             } else {
                 & $SetStatus "$($script:SelectedUser.DisplayName) is a member of $count site(s)."
             }
-            $btnAdd.Enabled = $true
+            $btnAdd.Enabled          = $true
+            $btnRefreshSites.Enabled = $true
         } catch {
             & $SetStatus "Failed to load memberships: $_"
             [System.Windows.Forms.MessageBox]::Show($_.ToString(), "Error", 'OK', 'Error') | Out-Null
@@ -684,6 +792,26 @@ function Show-MainForm {
         }
     })
 
+    # Refresh employee search (re-runs last query)
+    $btnRefreshSearch.Add_Click({
+        if ($txtSearch.Text.Trim()) { $btnSearch.PerformClick() }
+    })
+
+    # Refresh site access (re-scans for currently selected user)
+    $btnRefreshSites.Add_Click({
+        if (-not $script:SelectedUser) { return }
+        & $SetStatus "Refreshing site memberships for $($script:SelectedUser.DisplayName)..."
+        try {
+            $script:Memberships = @(Get-UserSiteMemberships -UserEmail $script:SelectedUser.Email -AllSites $script:AllSites -LogBox $rtbLog)
+            & $RefreshGrid
+            $count = $script:Memberships.Count
+            & $SetStatus "$($script:SelectedUser.DisplayName) is a member of $count site(s)."
+        } catch {
+            & $SetStatus "Refresh failed: $_"
+            [System.Windows.Forms.MessageBox]::Show($_.ToString(), "Error", 'OK', 'Error') | Out-Null
+        }
+    })
+
     # About dialog
     $btnAbout.Add_Click({ Show-AboutDialog -Owner $form })
 
@@ -703,4 +831,11 @@ Load-AppConfig
 $adminUrl = Show-AdminUrlDialog
 if (-not $adminUrl) { exit }
 
-Show-MainForm -AdminUrl $adminUrl
+try {
+    $sites = Show-LoadingForm -AdminUrl $adminUrl
+    Show-MainForm -AdminUrl $adminUrl -PreloadedSites $sites
+} catch {
+    [System.Windows.Forms.MessageBox]::Show(
+        "Could not connect to tenant:`n$_",
+        "Connection Failed", 'OK', 'Error') | Out-Null
+}
