@@ -66,14 +66,16 @@ Have the Global Admin visit this URL and sign in with their admin account:
 https://login.microsoftonline.com/common/adminconsent?client_id=630f7dac-df2b-4586-a6b4-e83acbf4e91e&redirect_uri=https://login.microsoftonline.com/common/oauth2/nativeclient
 ```
 
-They will see a consent prompt listing the permissions the app is requesting (SharePoint read/write across all sites, basic user directory access). After they click Accept, the tool will work for anyone in that tenant with no further setup.
+They will see a consent prompt listing the permissions the app is requesting (SharePoint read/write across all sites, basic user directory and group membership read access). After they click Accept, the tool will work for anyone in that tenant with no further setup.
+
+> **Existing tenants:** if you previously consented before `GroupMember.Read.All` was added, have the Global Admin visit the consent URL again to grant the new permission. The tool will still work without it — group-based access just won't appear in results.
 
 ## Using your own app registration
 
 If you fork this repo, you can substitute your own multi-tenant Entra ID app registration. Register an app at [portal.azure.com](https://portal.azure.com) with:
 
 - Supported account types: Accounts in any organizational directory (Multitenant)
-- Application permissions: `SharePoint > Sites.FullControl.All`, `Microsoft Graph > User.ReadBasic.All`, `Microsoft Graph > Sites.Read.All`
+- Application permissions: `SharePoint > Sites.FullControl.All`, `Microsoft Graph > User.ReadBasic.All`, `Microsoft Graph > Sites.Read.All`, `Microsoft Graph > GroupMember.Read.All`
 
 Then replace `$script:AppClientId` near the top of `SP-MembershipManager.ps1` with your own Client ID, generate a certificate for your app registration, and update `app-config.json` with the cert path and your tenant name.
 

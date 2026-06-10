@@ -271,11 +271,41 @@ function Search-Users {
     return $users | Where-Object { $_.Email }
 }
 
+function Get-UserTransitiveGroupMap {
+    # Returns a hashtable {objectId -> displayName} for every Entra ID group the user
+    # belongs to transitively. Used to detect access granted via security groups.
+    # Requires GroupMember.Read.All on the app registration.
+    # Returns an empty hashtable on any failure so the caller degrades gracefully.
+    param([string]$UserUpn)
+    try {
+        $encoded  = [Uri]::EscapeDataString($UserUpn)
+        $userResp = Invoke-PnPGraphMethod -Url "users/$($encoded)?`$select=id" -Method Get
+        $userId   = $userResp.id
+        if (-not $userId) { return @{} }
+
+        $map = @{}
+        $url = "users/$userId/transitiveMemberOf/microsoft.graph.group?`$select=id,displayName&`$top=100"
+        do {
+            $resp = Invoke-PnPGraphMethod -Url $url -Method Get
+            foreach ($g in $resp.value) {
+                $map[$g.id] = $g.displayName
+            }
+            $nextLink = $resp.PSObject.Properties.Item('@odata.nextLink')
+            $url = if ($nextLink) { $nextLink.Value } else { $null }
+        } while ($url)
+        return $map
+    } catch {
+        Write-Log "Warning: could not fetch transitive group memberships (GroupMember.Read.All may not be consented) - $_" | Out-Null
+        return @{}
+    }
+}
+
 function Get-UserSiteMemberships {
     param(
         [string]$UserEmail,
         [array]$AllSites,
-        [System.Windows.Forms.RichTextBox]$LogBox
+        [System.Windows.Forms.RichTextBox]$LogBox,
+        [hashtable]$UserGroupMap = @{}
     )
 
     $line = Write-Log "Checking $($AllSites.Count) sites in parallel (up to 8 at once)..."
@@ -284,7 +314,7 @@ function Get-UserSiteMemberships {
     }
 
     $scriptBlock = {
-        param($SiteTitle, $SiteUrl, $UserEmail, $ClientId, $CertPath, $CertPasswordPlain, $Tenant)
+        param($SiteTitle, $SiteUrl, $UserEmail, $ClientId, $CertPath, $CertPasswordPlain, $Tenant, $UserGroupMap)
         try {
             Import-Module PnP.PowerShell -ErrorAction Stop -WarningAction SilentlyContinue
             $secPass = ConvertTo-SecureString $CertPasswordPlain -AsPlainText -Force
@@ -305,11 +335,33 @@ function Get-UserSiteMemberships {
                 if (-not $role) { continue }
 
                 $members = Get-PnPGroupMember -Group $group
+
+                # Direct membership check
                 if ($members | Where-Object { $_.Email -eq $UserEmail }) {
                     return [PSCustomObject]@{
                         SiteName = $SiteTitle
                         SiteUrl  = $SiteUrl
                         Role     = $role
+                        ViaGroup = $null
+                    }
+                }
+
+                # Indirect membership via Entra ID security group.
+                # Entra ID groups added to SP groups have LoginName like "c:0t.c|tenant|{guid}".
+                # Extract the trailing GUID and check against the user's transitive group map.
+                if ($UserGroupMap -and $UserGroupMap.Count -gt 0) {
+                    foreach ($member in $members) {
+                        if ($member.LoginName -match '\|([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})$') {
+                            $groupId = $Matches[1]
+                            if ($UserGroupMap.ContainsKey($groupId)) {
+                                return [PSCustomObject]@{
+                                    SiteName = $SiteTitle
+                                    SiteUrl  = $SiteUrl
+                                    Role     = $role
+                                    ViaGroup = $UserGroupMap[$groupId]
+                                }
+                            }
+                        }
                     }
                 }
             }
@@ -331,6 +383,7 @@ function Get-UserSiteMemberships {
         [void]$ps.AddArgument($script:CertPath)
         [void]$ps.AddArgument($script:CertPasswordPlain)
         [void]$ps.AddArgument($script:TenantName)
+        [void]$ps.AddArgument($UserGroupMap)
         [PSCustomObject]@{ PS = $ps; Handle = $ps.BeginInvoke() }
     }
 
@@ -815,7 +868,8 @@ function Show-MainForm {
     $RefreshGrid = {
         $dgv.Rows.Clear()
         foreach ($m in $script:Memberships) {
-            [void]$dgv.Rows.Add($m.SiteName, $m.Role, $m.SiteUrl)
+            $displayRole = if ($m.ViaGroup) { "$($m.Role) (via $($m.ViaGroup))" } else { $m.Role }
+            [void]$dgv.Rows.Add($m.SiteName, $displayRole, $m.SiteUrl)
         }
     }
 
@@ -883,11 +937,18 @@ function Show-MainForm {
         & $SetStatus "Loading site memberships for $($script:SelectedUser.DisplayName)..."
 
         try {
-            $script:Memberships = @(Get-UserSiteMemberships -UserEmail $script:SelectedUser.Email -AllSites $script:AllSites -LogBox $rtbLog)
+            & $SetStatus "Resolving group memberships for $($script:SelectedUser.DisplayName)..."
+            $groupMap = Get-UserTransitiveGroupMap -UserUpn $script:SelectedUser.Account
+            & $SetStatus "Scanning site access for $($script:SelectedUser.DisplayName)..."
+            $script:Memberships = @(Get-UserSiteMemberships -UserEmail $script:SelectedUser.Email -AllSites $script:AllSites -LogBox $rtbLog -UserGroupMap $groupMap)
             & $RefreshGrid
-            $count = $script:Memberships.Count
+            $count        = $script:Memberships.Count
+            $directCount  = @($script:Memberships | Where-Object { -not $_.ViaGroup }).Count
+            $groupCount   = @($script:Memberships | Where-Object { $_.ViaGroup }).Count
             if ($count -eq 0) {
                 & $SetStatus "$($script:SelectedUser.DisplayName) has no site access."
+            } elseif ($groupCount -gt 0) {
+                & $SetStatus "$($script:SelectedUser.DisplayName) has access to $count site(s) — $directCount direct, $groupCount via group."
             } else {
                 & $SetStatus "$($script:SelectedUser.DisplayName) is a member of $count site(s)."
             }
@@ -899,9 +960,14 @@ function Show-MainForm {
         }
     })
 
-    # Grid selection enables remove button
+    # Grid selection enables remove button — disabled for via-group rows (can't remove group-inherited access)
     $dgv.Add_SelectionChanged({
-        $btnRemove.Enabled = ($script:SelectedUser -and $dgv.SelectedRows.Count -gt 0)
+        if ($script:SelectedUser -and $dgv.SelectedRows.Count -gt 0) {
+            $idx = $dgv.SelectedRows[0].Index
+            $btnRemove.Enabled = ($idx -ge 0 -and $idx -lt $script:Memberships.Count -and -not $script:Memberships[$idx].ViaGroup)
+        } else {
+            $btnRemove.Enabled = $false
+        }
     })
 
     # Add to site
@@ -988,10 +1054,17 @@ function Show-MainForm {
         if (-not $script:SelectedUser) { return }
         & $SetStatus "Refreshing site memberships for $($script:SelectedUser.DisplayName)..."
         try {
-            $script:Memberships = @(Get-UserSiteMemberships -UserEmail $script:SelectedUser.Email -AllSites $script:AllSites -LogBox $rtbLog)
+            $groupMap = Get-UserTransitiveGroupMap -UserUpn $script:SelectedUser.Account
+            $script:Memberships = @(Get-UserSiteMemberships -UserEmail $script:SelectedUser.Email -AllSites $script:AllSites -LogBox $rtbLog -UserGroupMap $groupMap)
             & $RefreshGrid
-            $count = $script:Memberships.Count
-            & $SetStatus "$($script:SelectedUser.DisplayName) is a member of $count site(s)."
+            $count       = $script:Memberships.Count
+            $directCount = @($script:Memberships | Where-Object { -not $_.ViaGroup }).Count
+            $groupCount  = @($script:Memberships | Where-Object { $_.ViaGroup }).Count
+            if ($groupCount -gt 0) {
+                & $SetStatus "$($script:SelectedUser.DisplayName) has access to $count site(s) — $directCount direct, $groupCount via group."
+            } else {
+                & $SetStatus "$($script:SelectedUser.DisplayName) is a member of $count site(s)."
+            }
         } catch {
             & $SetStatus "Refresh failed: $_"
             [System.Windows.Forms.MessageBox]::Show($_.ToString(), "Error", 'OK', 'Error') | Out-Null

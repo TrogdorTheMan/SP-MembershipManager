@@ -22,11 +22,11 @@ The success dialog that appears after an add or remove includes a short countdow
 
 **In short:** if the count looks wrong after a change, wait a few seconds and refresh again. If it continues beyond 2 or 3 refreshes, contact your help desk or whomever provided the tool to you.
 
-### Users with access via security groups are not shown
+### Access via security groups shows as "Role (via GroupName)"
 
-If a user has SharePoint access because they belong to an Entra ID security group (e.g. "SharePoint Power Users"), the tool will not currently detect that access. Only users listed directly on a site's Owner, Member, or Visitor group are shown.
+If a user has SharePoint access because they belong to an Entra ID security group (e.g. "SharePoint Power Users"), the tool detects this and shows it in the Role column as "Member (via SharePoint Power Users)" or similar.
 
-This is a known limitation and is on the roadmap to address.
+This access is read-only in the tool — you cannot remove someone from a site if their access comes from a group. To remove that access, the group membership itself needs to change.
 
 ### PnP.PowerShell installs on first run
 
