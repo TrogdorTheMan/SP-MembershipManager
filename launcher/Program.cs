@@ -21,13 +21,17 @@ try
     using var reader = new StreamReader(stream);
     File.WriteAllText(tempScript, reader.ReadToEnd(), System.Text.Encoding.UTF8);
 
-    using var proc = Process.Start(new ProcessStartInfo
+    var psi = new ProcessStartInfo
     {
         FileName = pwsh,
         Arguments = $"-NonInteractive -File \"{tempScript}\"",
         UseShellExecute = false,
         CreateNoWindow = true,
-    })!;
+    };
+    // Tell the script where the exe lives so it can find app-config.json
+    psi.Environment["SP_MM_APP_DIR"] = AppContext.BaseDirectory.TrimEnd('\\');
+
+    using var proc = Process.Start(psi)!;
 
     proc.WaitForExit();
     return proc.ExitCode;
