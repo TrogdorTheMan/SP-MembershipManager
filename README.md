@@ -48,7 +48,7 @@ To build locally, install the [.NET 8 SDK](https://dotnet.microsoft.com/download
 .\build.ps1
 ```
 
-The compiled executable is written to `build\output\SP-MembershipManager.exe`. PnP.PowerShell is installed automatically on first run if not already present.
+The compiled executable is written to `build\output\SP-MembershipManager.exe`. You will still need `app-config.json` and `sp-mm.pfx` in the same folder as the exe — see the Deploying section below. PnP.PowerShell is installed automatically on first run if not already present.
 
 ## Deploying to a new tenant
 
