@@ -55,6 +55,8 @@ if (Test-Path $iconFile) {
 }
 
 if (Get-Module PS12EXE) {
+    # -pwsh targets the PS7 runtime instead of Windows PowerShell 5.1
+    $params['pwsh'] = $true
     ps12exe @params
 } else {
     Invoke-ps2exe @params
