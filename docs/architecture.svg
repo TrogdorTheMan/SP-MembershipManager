@@ -1,0 +1,88 @@
+<svg viewBox="0 0 720 420" xmlns="http://www.w3.org/2000/svg" font-family="Segoe UI, sans-serif" font-size="13">
+
+  <!-- Background -->
+  <rect width="720" height="420" fill="#f8f9fa" rx="8"/>
+
+  <!-- ── Zone 1: End User Machine ── -->
+  <rect x="20" y="20" width="210" height="250" rx="8" fill="#eef0f4" stroke="#c8cdd6" stroke-width="1.5"/>
+  <text x="125" y="44" text-anchor="middle" font-size="11" font-weight="600" fill="#6b7280">END USER MACHINE</text>
+
+  <!-- exe outer box -->
+  <rect x="36" y="54" width="178" height="200" rx="7" fill="#2563eb"/>
+  <text x="125" y="76" text-anchor="middle" font-size="12" font-weight="700" fill="#ffffff">SP-MembershipManager.exe</text>
+
+  <rect x="50" y="86" width="150" height="30" rx="4" fill="rgba(255,255,255,0.18)"/>
+  <text x="125" y="106" text-anchor="middle" font-size="11" fill="#dbeafe">PowerShell + WinForms UI</text>
+
+  <rect x="50" y="124" width="150" height="30" rx="4" fill="rgba(255,255,255,0.18)"/>
+  <text x="125" y="144" text-anchor="middle" font-size="11" fill="#dbeafe">PnP.PowerShell module</text>
+
+  <rect x="50" y="162" width="150" height="30" rx="4" fill="rgba(255,255,255,0.18)"/>
+  <text x="125" y="182" text-anchor="middle" font-size="11" fill="#dbeafe">app-config.json</text>
+
+  <rect x="50" y="200" width="150" height="30" rx="4" fill="rgba(255,255,255,0.18)"/>
+  <text x="125" y="220" text-anchor="middle" font-size="11" fill="#dbeafe">sp-mm.pfx (cert)</text>
+
+  <!-- ── Zone 2: TrogdorTheMan's Azure Tenant ── -->
+  <rect x="260" y="20" width="200" height="130" rx="8" fill="#eef0f4" stroke="#c8cdd6" stroke-width="1.5"/>
+  <text x="360" y="44" text-anchor="middle" font-size="11" font-weight="600" fill="#6b7280">TROGDORTHEMAN'S AZURE TENANT</text>
+
+  <rect x="278" y="56" width="164" height="72" rx="6" fill="#dde1ea" stroke="#c8cdd6" stroke-width="1"/>
+  <text x="360" y="76" text-anchor="middle" font-size="12" font-weight="600" fill="#1a1a2e">Entra ID App Reg</text>
+  <text x="360" y="93" text-anchor="middle" font-size="10" fill="#6b7280">Client ID + Certificate</text>
+  <text x="360" y="108" text-anchor="middle" font-size="10" fill="#6b7280">Multi-tenant</text>
+  <text x="360" y="121" text-anchor="middle" font-size="10" fill="#6b7280">(registered once by you)</text>
+
+  <!-- ── Zone 3: Client Tenant ── -->
+  <rect x="260" y="175" width="440" height="225" rx="8" fill="#eef0f4" stroke="#c8cdd6" stroke-width="1.5"/>
+  <text x="480" y="199" text-anchor="middle" font-size="11" font-weight="600" fill="#6b7280">CLIENT TENANT (autonw)</text>
+
+  <!-- Service Principal -->
+  <rect x="278" y="210" width="164" height="60" rx="6" fill="#dde1ea" stroke="#c8cdd6" stroke-width="1"/>
+  <text x="360" y="232" text-anchor="middle" font-size="12" font-weight="600" fill="#1a1a2e">Service Principal</text>
+  <text x="360" y="249" text-anchor="middle" font-size="10" fill="#6b7280">created by one-time</text>
+  <text x="360" y="263" text-anchor="middle" font-size="10" fill="#6b7280">admin consent URL</text>
+
+  <!-- SharePoint -->
+  <rect x="470" y="210" width="200" height="60" rx="6" fill="#dde1ea" stroke="#c8cdd6" stroke-width="1"/>
+  <text x="570" y="232" text-anchor="middle" font-size="12" font-weight="600" fill="#1a1a2e">SharePoint Online</text>
+  <text x="570" y="249" text-anchor="middle" font-size="10" fill="#6b7280">Sites.FullControl.All</text>
+  <text x="570" y="263" text-anchor="middle" font-size="10" fill="#6b7280">(application permission)</text>
+
+  <!-- One-time setup -->
+  <rect x="278" y="293" width="164" height="55" rx="6" fill="#fef9c3" stroke="#d97706" stroke-width="1"/>
+  <text x="360" y="313" text-anchor="middle" font-size="11" font-weight="600" fill="#92400e">One-time setup</text>
+  <text x="360" y="329" text-anchor="middle" font-size="10" fill="#92400e">Global Admin visits</text>
+  <text x="360" y="343" text-anchor="middle" font-size="10" fill="#92400e">adminconsent URL</text>
+
+  <!-- Microsoft Graph -->
+  <rect x="470" y="293" width="200" height="60" rx="6" fill="#dde1ea" stroke="#c8cdd6" stroke-width="1"/>
+  <text x="570" y="315" text-anchor="middle" font-size="12" font-weight="600" fill="#1a1a2e">Microsoft Graph</text>
+  <text x="570" y="332" text-anchor="middle" font-size="10" fill="#6b7280">User.ReadBasic.All</text>
+  <text x="570" y="347" text-anchor="middle" font-size="10" fill="#6b7280">(user search)</text>
+
+  <!-- ── Arrows ── -->
+  <!-- exe → Entra ID -->
+  <line x1="230" y1="80" x2="278" y2="80" stroke="#2563eb" stroke-width="1.5" marker-end="url(#ab)"/>
+  <text x="254" y="72" text-anchor="middle" font-size="9" fill="#2563eb">cert auth</text>
+
+  <!-- Entra ID → Service Principal (dashed) -->
+  <line x1="360" y1="150" x2="360" y2="210" stroke="#c8cdd6" stroke-width="1.5" stroke-dasharray="4,3" marker-end="url(#ag)"/>
+
+  <!-- Service Principal → SharePoint -->
+  <line x1="442" y1="240" x2="470" y2="240" stroke="#6b7280" stroke-width="1.5" marker-end="url(#ad)"/>
+
+  <!-- One-time setup → Graph -->
+  <line x1="442" y1="320" x2="470" y2="320" stroke="#d97706" stroke-width="1.5" marker-end="url(#ao)"/>
+
+  <!-- exe → Client Tenant (PnP operations, dashed) -->
+  <path d="M 125 254 Q 125 390 260 340" fill="none" stroke="#6b7280" stroke-width="1.5" stroke-dasharray="5,3" marker-end="url(#ad)"/>
+  <text x="100" y="370" font-size="9" fill="#6b7280">PnP operations</text>
+
+  <defs>
+    <marker id="ab" markerWidth="8" markerHeight="8" refX="6" refY="3" orient="auto"><path d="M0,0 L0,6 L8,3 z" fill="#2563eb"/></marker>
+    <marker id="ag" markerWidth="8" markerHeight="8" refX="6" refY="3" orient="auto"><path d="M0,0 L0,6 L8,3 z" fill="#c8cdd6"/></marker>
+    <marker id="ad" markerWidth="8" markerHeight="8" refX="6" refY="3" orient="auto"><path d="M0,0 L0,6 L8,3 z" fill="#6b7280"/></marker>
+    <marker id="ao" markerWidth="8" markerHeight="8" refX="6" refY="3" orient="auto"><path d="M0,0 L0,6 L8,3 z" fill="#d97706"/></marker>
+  </defs>
+</svg>
