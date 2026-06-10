@@ -18,6 +18,10 @@ jobs:
         shell: pwsh
         run: Install-Module -Name PS12EXE -Scope CurrentUser -Force
 
+      - name: Dump PS12EXE parameters
+        shell: pwsh
+        run: Get-Help ps12exe -Full | Out-String
+
       - name: Build exe
         shell: pwsh
         run: .\build.ps1
