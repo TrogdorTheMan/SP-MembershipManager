@@ -35,7 +35,7 @@
 
   <!-- ── Zone 3: Client Tenant ── -->
   <rect x="260" y="175" width="440" height="225" rx="8" fill="#eef0f4" stroke="#c8cdd6" stroke-width="1.5"/>
-  <text x="480" y="199" text-anchor="middle" font-size="11" font-weight="600" fill="#6b7280">CLIENT TENANT (autonw)</text>
+  <text x="480" y="199" text-anchor="middle" font-size="11" font-weight="600" fill="#6b7280">CLIENT TENANT</text>
 
   <!-- Service Principal -->
   <rect x="278" y="210" width="164" height="60" rx="6" fill="#dde1ea" stroke="#c8cdd6" stroke-width="1"/>
