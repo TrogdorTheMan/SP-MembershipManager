@@ -1,0 +1,37 @@
+name: Build
+
+on:
+  push:
+    branches: [ main ]
+  release:
+    types: [ published ]
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: windows-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install PS12EXE
+        shell: pwsh
+        run: Install-Module -Name PS12EXE -Scope CurrentUser -Force
+
+      - name: Build exe
+        shell: pwsh
+        run: .\build.ps1
+
+      - name: Upload build artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: SP-MembershipManager
+          path: build/output/SP-MembershipManager.exe
+          if-no-files-found: error
+
+      - name: Attach exe to release
+        if: github.event_name == 'release'
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: gh release upload ${{ github.event.release.tag_name }} build/output/SP-MembershipManager.exe

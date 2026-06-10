@@ -38,7 +38,9 @@ A dialog will prompt for your SharePoint Admin URL (e.g. `https://yourtenant-adm
 
 ## Building a standalone .exe
 
-Install [ps2exe](https://github.com/MScholtes/PS2EXE) and then run:
+Every push to `main` and every release is built automatically by GitHub Actions. Download the artifact from the [Actions tab](https://github.com/TrogdorTheMan/SP-MembershipManager/actions) or grab the `.exe` attached to any [release](https://github.com/TrogdorTheMan/SP-MembershipManager/releases).
+
+To build locally, install [PS12EXE](https://github.com/steve02081504/PS12EXE) and run:
 
 ```powershell
 .\build.ps1
@@ -78,9 +80,13 @@ Then replace `$script:AppClientId` near the top of `SP-MembershipManager.ps1` wi
 
 An application for free code signing through the [SignPath Foundation](https://signpath.org) open source program was submitted on 2026-06-09 and is pending review. Once approved, releases will be signed.
 
-Until signing is in place, Windows Defender may flag the executable as a false positive. This is a known issue with PowerShell-compiled executables. To work around it, add a Defender exclusion for the exe after downloading:
+Until signing is in place, Windows Defender may flag the executable as a false positive when building locally — this is a known issue with PowerShell-compiled executables.
 
-**Windows Security → Virus & threat protection → Manage settings → Add or remove exclusions → Add file → select SP-MembershipManager.exe**
+**Workaround 1 (easiest):** Download the exe from the [Actions tab](https://github.com/TrogdorTheMan/SP-MembershipManager/actions) or a [release](https://github.com/TrogdorTheMan/SP-MembershipManager/releases). CI builds run on GitHub's runners where this is not an issue.
+
+**Workaround 2 (local builds):** Add a Defender exclusion for the PS12EXE module folder before running `build.ps1`:
+
+**Windows Security → Virus & threat protection → Manage settings → Add or remove exclusions → Add folder → `%USERPROFILE%\Documents\PowerShell\Modules\PS12EXE`**
 
 ## License
 
