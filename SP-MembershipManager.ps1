@@ -81,14 +81,19 @@ function Unprotect-String {
 # and create your own app-config.json with your secret.
 # ---------------------------------------------------------------------------
 
-$script:AppClientId      = "630f7dac-df2b-4586-a6b4-e83acbf4e91e"
-$script:TenantName       = ""
-$script:CertPath         = ""
-$script:CertPassword     = $null
+$script:AppClientId       = "630f7dac-df2b-4586-a6b4-e83acbf4e91e"
+$script:TenantName        = ""
+$script:CertPath          = ""
+$script:CertPassword      = $null
 $script:CertPasswordPlain = ""
 
-$script:ConfigFile   = Join-Path $PSScriptRoot "app-config.json"
-$script:LastUrlFile  = Join-Path $PSScriptRoot "last-url.txt"
+# $PSScriptRoot is empty when running as a ps2exe-compiled exe; fall back to the exe's directory.
+$script:ScriptRoot = if ($PSScriptRoot) { $PSScriptRoot } else {
+    [System.AppDomain]::CurrentDomain.BaseDirectory.TrimEnd('\')
+}
+
+$script:ConfigFile  = Join-Path $script:ScriptRoot "app-config.json"
+$script:LastUrlFile = Join-Path $script:ScriptRoot "last-url.txt"
 
 function Load-AppConfig {
     if (-not (Test-Path $script:ConfigFile)) {
@@ -112,7 +117,7 @@ function Load-AppConfig {
     }
     $certPath = $cfg.CertificatePath
     if (-not [System.IO.Path]::IsPathRooted($certPath)) {
-        $certPath = Join-Path $PSScriptRoot $certPath
+        $certPath = Join-Path $script:ScriptRoot $certPath
     }
     if (-not (Test-Path $certPath)) {
         [System.Windows.Forms.MessageBox]::Show(
