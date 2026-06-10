@@ -12,3 +12,7 @@ logs/
 
 # Local config (contains client secret - never commit)
 app-config.json
+
+# Certificate files (contain private key - never commit)
+*.pfx
+*.cer
