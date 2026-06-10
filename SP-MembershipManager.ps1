@@ -398,7 +398,7 @@ function Show-CountdownDialog {
 
     $dlg                  = New-Object System.Windows.Forms.Form
     $dlg.Text             = $Title
-    $dlg.Size             = New-Object System.Drawing.Size(400, 165)
+    $dlg.Size             = New-Object System.Drawing.Size(420, 210)
     $dlg.StartPosition    = 'CenterScreen'
     $dlg.FormBorderStyle  = 'FixedDialog'
     $dlg.MaximizeBox      = $false
@@ -415,13 +415,13 @@ function Show-CountdownDialog {
     $lbl              = New-Object System.Windows.Forms.Label
     $lbl.Text         = $Message
     $lbl.Location     = New-Object System.Drawing.Point(58, 16)
-    $lbl.Size         = New-Object System.Drawing.Size(320, 60)
+    $lbl.Size         = New-Object System.Drawing.Size(340, 100)
     $lbl.AutoSize     = $false
 
     $btn              = New-Object System.Windows.Forms.Button
     $btn.Text         = "OK ($Seconds)"
     $btn.Size         = New-Object System.Drawing.Size(110, 28)
-    $btn.Location     = New-Object System.Drawing.Point(270, 95)
+    $btn.Location     = New-Object System.Drawing.Point(288, 130)
     $btn.Enabled      = $false
     $btn.Add_Click({ $dlg.Close() })
 
