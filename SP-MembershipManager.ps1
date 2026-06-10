@@ -372,7 +372,7 @@ function Show-LoadingForm {
 
     $loading = New-Object System.Windows.Forms.Form
     $loading.Text            = "SP Membership Manager"
-    $loading.Size            = New-Object System.Drawing.Size(320, 148)
+    $loading.Size            = New-Object System.Drawing.Size(320, 118)
     $loading.FormBorderStyle = 'FixedDialog'
     $loading.StartPosition   = 'CenterScreen'
     $loading.MaximizeBox     = $false
@@ -385,35 +385,99 @@ function Show-LoadingForm {
     $lblTitle.Location = New-Object System.Drawing.Point(20, 20)
     $lblTitle.AutoSize = $true
 
+    $lblSpinner = New-Object System.Windows.Forms.Label
+    $lblSpinner.Text      = "|"
+    $lblSpinner.Location  = New-Object System.Drawing.Point(20, 56)
+    $lblSpinner.Size      = New-Object System.Drawing.Size(18, 20)
+    $lblSpinner.Font      = New-Object System.Drawing.Font('Courier New', 10)
+    $lblSpinner.ForeColor = [System.Drawing.Color]::DimGray
+
     $lblStatus = New-Object System.Windows.Forms.Label
-    $lblStatus.Text      = "Connecting to tenant..."
-    $lblStatus.Location  = New-Object System.Drawing.Point(20, 54)
-    $lblStatus.Size      = New-Object System.Drawing.Size(270, 20)
+    $lblStatus.Text      = "Please wait..."
+    $lblStatus.Location  = New-Object System.Drawing.Point(42, 56)
+    $lblStatus.Size      = New-Object System.Drawing.Size(248, 20)
     $lblStatus.ForeColor = [System.Drawing.Color]::DimGray
 
-    $progress = New-Object System.Windows.Forms.ProgressBar
-    $progress.Location              = New-Object System.Drawing.Point(20, 84)
-    $progress.Size                  = New-Object System.Drawing.Size(270, 16)
-    $progress.Style                 = 'Marquee'
-    $progress.MarqueeAnimationSpeed = 30
-
-    $loading.Controls.AddRange(@($lblTitle, $lblStatus, $progress))
+    $loading.Controls.AddRange(@($lblTitle, $lblSpinner, $lblStatus))
     $loading.Show()
     [System.Windows.Forms.Application]::DoEvents()
 
-    try {
-        Connect-Tenant -AdminUrl $AdminUrl
-        $lblStatus.Text = "Loading site list..."
-        [System.Windows.Forms.Application]::DoEvents()
-        $sites = Get-AllSites
-        $loading.Close()
-        $loading.Dispose()
-        return $sites
-    } catch {
-        $loading.Close()
-        $loading.Dispose()
-        throw
+    # Run the slow Connect + GetAllSites work in a background runspace so the
+    # spinner can animate on the main thread via DoEvents polling.
+    $syncHash = [System.Collections.Hashtable]::Synchronized(@{
+        Sites = $null
+        Error = $null
+    })
+
+    $bgScript = {
+        param($AdminUrl, $ClientId, $CertPath, $CertPasswordPlain, $TenantName, $SyncHash)
+        try {
+            Import-Module PnP.PowerShell -ErrorAction Stop -WarningAction SilentlyContinue
+            $secPass = ConvertTo-SecureString $CertPasswordPlain -AsPlainText -Force
+            Connect-PnPOnline -Url $AdminUrl `
+                -ClientId $ClientId `
+                -CertificatePath $CertPath `
+                -CertificatePassword $secPass `
+                -Tenant $TenantName `
+                -WarningAction SilentlyContinue `
+                -ErrorAction Stop
+            $sites = [System.Collections.Generic.List[PSCustomObject]]::new()
+            $url = "sites?`$select=displayName,webUrl&`$top=200"
+            do {
+                $response = Invoke-PnPGraphMethod -Url $url -Method Get
+                foreach ($s in $response.value) {
+                    if ($s.webUrl -notlike "*/personal/*" -and $s.webUrl -match "/sites/") {
+                        $sites.Add([PSCustomObject]@{ Title = $s.displayName; Url = $s.webUrl })
+                    }
+                }
+                $nextLink = $response.PSObject.Properties.Item('@odata.nextLink')
+                $url = if ($nextLink) { $nextLink.Value } else { $null }
+            } while ($url)
+            $SyncHash.Sites = $sites
+        } catch {
+            $SyncHash.Error = $_.ToString()
+        }
     }
+
+    $rs = [System.Management.Automation.Runspaces.RunspaceFactory]::CreateRunspace()
+    $rs.Open()
+    $ps = [System.Management.Automation.PowerShell]::Create()
+    $ps.Runspace = $rs
+    [void]$ps.AddScript($bgScript)
+    [void]$ps.AddArgument($AdminUrl)
+    [void]$ps.AddArgument($script:AppClientId)
+    [void]$ps.AddArgument($script:CertPath)
+    [void]$ps.AddArgument($script:CertPasswordPlain)
+    [void]$ps.AddArgument($script:TenantName)
+    [void]$ps.AddArgument($syncHash)
+    $handle = $ps.BeginInvoke()
+
+    $frames = @('|', '/', '-', '\')
+    $frameIdx = 0
+    while (-not $handle.IsCompleted) {
+        $lblSpinner.Text = $frames[$frameIdx % 4]
+        $frameIdx++
+        [System.Windows.Forms.Application]::DoEvents()
+        Start-Sleep -Milliseconds 100
+    }
+
+    try { $ps.EndInvoke($handle) } catch { }
+    $ps.Dispose()
+    $rs.Close()
+    $rs.Dispose()
+
+    if ($syncHash.Error) {
+        $loading.Close()
+        $loading.Dispose()
+        throw $syncHash.Error
+    }
+
+    # Re-establish the PnP connection in the main runspace so the main form can use it.
+    Connect-Tenant -AdminUrl $AdminUrl
+
+    $loading.Close()
+    $loading.Dispose()
+    return $syncHash.Sites
 }
 
 function Show-AdminUrlDialog {
