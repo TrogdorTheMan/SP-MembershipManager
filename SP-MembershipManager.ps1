@@ -258,7 +258,9 @@ function Add-UserToSite {
     $groups = Get-PnPGroup
     $group  = $groups | Where-Object { $_.Title -like "* $Role`s" -or $_.Title -like "* ${Role}s" } | Select-Object -First 1
     if (-not $group) { throw "Could not find $Role group for site." }
-    Add-PnPGroupMember -Group $group -EmailAddress $UserEmail
+    # Use claims identity format to ensure the user is resolved correctly
+    # even if they haven't previously visited the site
+    Add-PnPGroupMember -Group $group -LoginName "i:0#.f|membership|$UserEmail"
 }
 
 function Remove-UserFromSite {
@@ -596,7 +598,7 @@ function Show-MainForm {
 
         $dlgForm = New-Object System.Windows.Forms.Form
         $dlgForm.Text = "Add User to Site"
-        $dlgForm.Size = New-Object System.Drawing.Size(420, 160)
+        $dlgForm.Size = New-Object System.Drawing.Size(420, 190)
         $dlgForm.FormBorderStyle = 'FixedDialog'
         $dlgForm.StartPosition = 'CenterParent'
         $dlgForm.MaximizeBox = $false; $dlgForm.MinimizeBox = $false
