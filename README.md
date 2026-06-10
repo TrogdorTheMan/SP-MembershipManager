@@ -22,6 +22,8 @@ A Windows GUI tool that lets authorized users manage SharePoint Online site memb
 
 No SharePoint Administrator role is required for the end user running the tool. Authentication is handled via an app-only service principal with pre-granted permissions.
 
+Site membership lookups run in parallel (up to 8 concurrent connections) using PowerShell runspaces, keeping scan times low even across large tenants.
+
 ## Running from source
 
 ```powershell

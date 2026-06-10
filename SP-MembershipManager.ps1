@@ -57,10 +57,11 @@ function Write-Log {
 # and create your own app-config.json with your secret.
 # ---------------------------------------------------------------------------
 
-$script:AppClientId  = "630f7dac-df2b-4586-a6b4-e83acbf4e91e"
-$script:TenantName   = ""
-$script:CertPath     = ""
-$script:CertPassword = $null
+$script:AppClientId      = "630f7dac-df2b-4586-a6b4-e83acbf4e91e"
+$script:TenantName       = ""
+$script:CertPath         = ""
+$script:CertPassword     = $null
+$script:CertPasswordPlain = ""
 
 $script:ConfigFile   = Join-Path $PSScriptRoot "app-config.json"
 $script:LastUrlFile  = Join-Path $PSScriptRoot "last-url.txt"
@@ -95,9 +96,10 @@ function Load-AppConfig {
             "Configuration Error", 'OK', 'Error') | Out-Null
         exit
     }
-    $script:CertPath     = $certPath
-    $script:CertPassword = ConvertTo-SecureString $cfg.CertificatePassword -AsPlainText -Force
-    $script:TenantName   = $cfg.Tenant
+    $script:CertPath          = $certPath
+    $script:CertPasswordPlain = $cfg.CertificatePassword
+    $script:CertPassword      = ConvertTo-SecureString $cfg.CertificatePassword -AsPlainText -Force
+    $script:TenantName        = $cfg.Tenant
 }
 
 function Get-LastUrl {
@@ -174,39 +176,78 @@ function Get-UserSiteMemberships {
         [System.Windows.Forms.RichTextBox]$LogBox
     )
 
-    $memberships = [System.Collections.Generic.List[PSCustomObject]]::new()
+    $line = Write-Log "Checking $($AllSites.Count) sites in parallel (up to 8 at once)..."
+    if ($LogBox) {
+        $LogBox.Invoke([Action]{ $LogBox.AppendText("$line`n"); $LogBox.ScrollToCaret() })
+    }
 
-    foreach ($site in $AllSites) {
-        $line = Write-Log "Checking $($site.Title)..."
-        if ($LogBox) {
-            $LogBox.Invoke([Action]{ $LogBox.AppendText("$line`n"); $LogBox.ScrollToCaret() })
-        }
-
+    $scriptBlock = {
+        param($SiteTitle, $SiteUrl, $UserEmail, $ClientId, $CertPath, $CertPasswordPlain, $Tenant)
         try {
-            Connect-Site -Url $site.Url
+            Import-Module PnP.PowerShell -ErrorAction Stop -WarningAction SilentlyContinue
+            $secPass = ConvertTo-SecureString $CertPasswordPlain -AsPlainText -Force
+            Connect-PnPOnline -Url $SiteUrl `
+                -ClientId $ClientId `
+                -CertificatePath $CertPath `
+                -CertificatePassword $secPass `
+                -Tenant $Tenant `
+                -WarningAction SilentlyContinue `
+                -ErrorAction Stop
 
             $groups = Get-PnPGroup
             foreach ($group in $groups) {
                 $role = $null
-                if ($group.Title -like '* Owners')   { $role = 'Owner'   }
-                elseif ($group.Title -like '* Members')  { $role = 'Member'  }
-                elseif ($group.Title -like '* Visitors') { $role = 'Visitor' }
+                if ($group.Title -like '* Owners')        { $role = 'Owner'   }
+                elseif ($group.Title -like '* Members')   { $role = 'Member'  }
+                elseif ($group.Title -like '* Visitors')  { $role = 'Visitor' }
                 if (-not $role) { continue }
 
                 $members = Get-PnPGroupMember -Group $group
                 if ($members | Where-Object { $_.Email -eq $UserEmail }) {
-                    $memberships.Add([PSCustomObject]@{
-                        SiteName = $site.Title
-                        SiteUrl  = $site.Url
+                    return [PSCustomObject]@{
+                        SiteName = $SiteTitle
+                        SiteUrl  = $SiteUrl
                         Role     = $role
-                    })
-                    break
+                    }
                 }
             }
+        } catch { }
+        return $null
+    }
+
+    $pool = [System.Management.Automation.Runspaces.RunspaceFactory]::CreateRunspacePool(1, 8)
+    $pool.Open()
+
+    $jobs = foreach ($site in $AllSites) {
+        $ps = [System.Management.Automation.PowerShell]::Create()
+        $ps.RunspacePool = $pool
+        [void]$ps.AddScript($scriptBlock)
+        [void]$ps.AddArgument($site.Title)
+        [void]$ps.AddArgument($site.Url)
+        [void]$ps.AddArgument($UserEmail)
+        [void]$ps.AddArgument($script:AppClientId)
+        [void]$ps.AddArgument($script:CertPath)
+        [void]$ps.AddArgument($script:CertPasswordPlain)
+        [void]$ps.AddArgument($script:TenantName)
+        [PSCustomObject]@{ PS = $ps; Handle = $ps.BeginInvoke() }
+    }
+
+    $memberships = [System.Collections.Generic.List[PSCustomObject]]::new()
+    foreach ($job in $jobs) {
+        try {
+            $result = $job.PS.EndInvoke($job.Handle)
+            foreach ($r in $result) {
+                if ($r) { $memberships.Add($r) }
+            }
         } catch {
-            Write-Log "Warning: could not check $($site.Title) - $_" | Out-Null
+            Write-Log "Warning: runspace error - $_" | Out-Null
+        } finally {
+            $job.PS.Dispose()
         }
     }
+
+    $pool.Close()
+    $pool.Dispose()
 
     return $memberships
 }
