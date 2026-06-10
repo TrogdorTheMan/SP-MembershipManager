@@ -57,38 +57,66 @@ function Write-Log {
 # and create your own app-config.json with your secret.
 # ---------------------------------------------------------------------------
 
-$script:AppClientId = "630f7dac-df2b-4586-a6b4-e83acbf4e91e"
+$script:AppClientId  = "630f7dac-df2b-4586-a6b4-e83acbf4e91e"
+$script:TenantName   = ""
+$script:CertPath     = ""
+$script:CertPassword = $null
 
 $script:ConfigFile = Join-Path $PSScriptRoot "app-config.json"
 
 function Load-AppConfig {
     if (-not (Test-Path $script:ConfigFile)) {
         [System.Windows.Forms.MessageBox]::Show(
-            "app-config.json not found next to the script.`n`nCreate it with the following content:`n`n{ `"ClientSecret`": `"YOUR_SECRET_HERE`" }",
+            "app-config.json not found next to the script.`n`nCreate it with the following content:`n`n{ `"CertificatePath`": `".\sp-mm.pfx`", `"CertificatePassword`": `"YOUR_CERT_PASSWORD`" }",
             "Configuration Missing", 'OK', 'Error') | Out-Null
         exit
     }
     $cfg = Get-Content $script:ConfigFile -Raw | ConvertFrom-Json
-    if (-not $cfg.ClientSecret) {
+    if (-not $cfg.CertificatePath -or -not $cfg.CertificatePassword) {
         [System.Windows.Forms.MessageBox]::Show(
-            "app-config.json is missing the ClientSecret field.",
+            "app-config.json is missing CertificatePath or CertificatePassword.",
             "Configuration Error", 'OK', 'Error') | Out-Null
         exit
     }
-    $script:AppClientSecret = $cfg.ClientSecret
+    $certPath = $cfg.CertificatePath
+    # Resolve relative paths from the script's directory
+    if (-not [System.IO.Path]::IsPathRooted($certPath)) {
+        $certPath = Join-Path $PSScriptRoot $certPath
+    }
+    if (-not (Test-Path $certPath)) {
+        [System.Windows.Forms.MessageBox]::Show(
+            "Certificate file not found: $certPath",
+            "Configuration Error", 'OK', 'Error') | Out-Null
+        exit
+    }
+    $script:CertPath     = $certPath
+    $script:CertPassword = ConvertTo-SecureString $cfg.CertificatePassword -AsPlainText -Force
 }
 
 # ---------------------------------------------------------------------------
 # SharePoint operations
 # ---------------------------------------------------------------------------
 
+function Get-TenantName {
+    param([string]$AdminUrl)
+    # Extracts "contoso" from "https://contoso-admin.sharepoint.com"
+    $host = ([System.Uri]$AdminUrl).Host
+    return $host.Split('.')[0] -replace '-admin$', ''
+}
+
 function Connect-Site {
     param([string]$Url)
-    Connect-PnPOnline -Url $Url -ClientId $script:AppClientId -ClientSecret $script:AppClientSecret
+    Connect-PnPOnline -Url $Url `
+        -ClientId $script:AppClientId `
+        -CertificatePath $script:CertPath `
+        -CertificatePassword $script:CertPassword `
+        -Tenant "$($script:TenantName).onmicrosoft.com" `
+        -WarningAction SilentlyContinue
 }
 
 function Connect-Tenant {
     param([string]$AdminUrl)
+    $script:TenantName = Get-TenantName -AdminUrl $AdminUrl
     Connect-Site -Url $AdminUrl
 }
 
