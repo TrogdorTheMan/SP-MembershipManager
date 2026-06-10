@@ -57,7 +57,7 @@ They will see a consent prompt listing the permissions the app is requesting (Sh
 If you fork this repo, you can substitute your own multi-tenant Entra ID app registration. Register an app at [portal.azure.com](https://portal.azure.com) with:
 
 - Supported account types: Accounts in any organizational directory (Multitenant)
-- Application permissions: `SharePoint > Sites.FullControl.All`, `Microsoft Graph > User.ReadBasic.All`
+- Application permissions: `SharePoint > Sites.FullControl.All`, `Microsoft Graph > User.ReadBasic.All`, `Microsoft Graph > Sites.Read.All`
 
 Then replace `$script:AppClientId` and `$script:AppClientSecret` near the top of `SP-MembershipManager.ps1` with your own values.
 
