@@ -233,16 +233,27 @@ function Get-UserSiteMemberships {
     }
 
     $memberships = [System.Collections.Generic.List[PSCustomObject]]::new()
-    foreach ($job in $jobs) {
-        try {
-            $result = $job.PS.EndInvoke($job.Handle)
-            foreach ($r in $result) {
-                if ($r) { $memberships.Add($r) }
+    $pending = [System.Collections.Generic.List[PSCustomObject]]::new()
+    foreach ($job in $jobs) { $pending.Add($job) }
+
+    while ($pending.Count -gt 0) {
+        $completed = @($pending | Where-Object { $_.Handle.IsCompleted })
+        foreach ($job in $completed) {
+            try {
+                $result = $job.PS.EndInvoke($job.Handle)
+                foreach ($r in $result) {
+                    if ($r) { $memberships.Add($r) }
+                }
+            } catch {
+                Write-Log "Warning: runspace error - $_" | Out-Null
+            } finally {
+                $job.PS.Dispose()
             }
-        } catch {
-            Write-Log "Warning: runspace error - $_" | Out-Null
-        } finally {
-            $job.PS.Dispose()
+            [void]$pending.Remove($job)
+        }
+        if ($pending.Count -gt 0) {
+            [System.Windows.Forms.Application]::DoEvents()
+            Start-Sleep -Milliseconds 100
         }
     }
 
@@ -269,7 +280,7 @@ function Remove-UserFromSite {
     $groups = Get-PnPGroup
     $group  = $groups | Where-Object { $_.Title -like "* $Role`s" -or $_.Title -like "* ${Role}s" } | Select-Object -First 1
     if (-not $group) { throw "Could not find $Role group for site." }
-    Remove-PnPGroupMember -Group $group -LoginName $UserEmail
+    Remove-PnPGroupMember -Group $group -LoginName "i:0#.f|membership|$UserEmail"
 }
 
 # ---------------------------------------------------------------------------
@@ -473,7 +484,7 @@ function Show-MainForm {
     $btnAbout.Text        = "About"
     $btnAbout.Location    = New-Object System.Drawing.Point(897, 400)
     $btnAbout.Size        = New-Object System.Drawing.Size(75, 30)
-    $btnAbout.Anchor      = 'Bottom,Right'
+    $btnAbout.Anchor      = [System.Windows.Forms.AnchorStyles]::Bottom -bor [System.Windows.Forms.AnchorStyles]::Right
 
     # Log box
     $rtbLog               = New-Object System.Windows.Forms.RichTextBox
@@ -484,6 +495,7 @@ function Show-MainForm {
     $rtbLog.ForeColor     = [System.Drawing.Color]::LightGreen
     $rtbLog.Font          = New-Object System.Drawing.Font('Consolas', 8)
     $rtbLog.ScrollBars    = 'Vertical'
+    $rtbLog.Anchor        = [System.Windows.Forms.AnchorStyles]::Bottom -bor [System.Windows.Forms.AnchorStyles]::Left -bor [System.Windows.Forms.AnchorStyles]::Right
 
     # Status strip
     $status               = New-Object System.Windows.Forms.StatusStrip
@@ -620,10 +632,17 @@ function Show-MainForm {
         if ($dlgForm.ShowDialog() -eq 'OK') {
             $site = $script:AllSites[$cmbS.SelectedIndex]
             $role = $cmbR.SelectedItem
+            $conf = [System.Windows.Forms.MessageBox]::Show(
+                "Add $($script:SelectedUser.DisplayName) to $($site.Title) as $($role)?",
+                "Confirm", 'YesNo', 'Warning')
+            if ($conf -ne 'Yes') { return }
             & $SetStatus "Adding $($script:SelectedUser.DisplayName) to $($site.Title) as $role..."
             try {
                 Add-UserToSite -SiteUrl $site.Url -UserEmail $script:SelectedUser.Email -Role $role
                 & $SetStatus "Added $($script:SelectedUser.DisplayName) to $($site.Title)."
+                [System.Windows.Forms.MessageBox]::Show(
+                    "$($script:SelectedUser.DisplayName) was successfully added to $($site.Title) as $role.",
+                    "Success", 'OK', 'Information') | Out-Null
                 # Refresh memberships
                 $script:Memberships = @(Get-UserSiteMemberships -UserEmail $script:SelectedUser.Email -AllSites $script:AllSites -LogBox $rtbLog)
                 & $RefreshGrid
@@ -645,14 +664,23 @@ function Show-MainForm {
         if ($conf -ne 'Yes') { return }
 
         & $SetStatus "Removing $($script:SelectedUser.DisplayName) from $($mem.SiteName)..."
+        $removeError = $null
         try {
             Remove-UserFromSite -SiteUrl $mem.SiteUrl -UserEmail $script:SelectedUser.Email -Role $mem.Role
-            & $SetStatus "Removed $($script:SelectedUser.DisplayName) from $($mem.SiteName)."
-            $script:Memberships = @(Get-UserSiteMemberships -UserEmail $script:SelectedUser.Email -AllSites $script:AllSites -LogBox $rtbLog)
-            & $RefreshGrid
         } catch {
-            & $SetStatus "Failed to remove user: $_"
-            [System.Windows.Forms.MessageBox]::Show($_.ToString(), "Error", 'OK', 'Error') | Out-Null
+            $removeError = $_
+        }
+        # Always refresh so the grid reflects actual state
+        $script:Memberships = @(Get-UserSiteMemberships -UserEmail $script:SelectedUser.Email -AllSites $script:AllSites -LogBox $rtbLog)
+        & $RefreshGrid
+        if ($removeError) {
+            & $SetStatus "Failed to remove user: $removeError"
+            [System.Windows.Forms.MessageBox]::Show($removeError.ToString(), "Error", 'OK', 'Error') | Out-Null
+        } else {
+            & $SetStatus "Removed $($script:SelectedUser.DisplayName) from $($mem.SiteName)."
+            [System.Windows.Forms.MessageBox]::Show(
+                "$($script:SelectedUser.DisplayName) was successfully removed from $($mem.SiteName).",
+                "Success", 'OK', 'Information') | Out-Null
         }
     })
 
