@@ -63,7 +63,7 @@ Before first use, a Global Admin in the target tenant needs to grant consent for
 Have the Global Admin visit this URL and sign in with their admin account:
 
 ```
-https://login.microsoftonline.com/common/adminconsent?client_id=630f7dac-df2b-4586-a6b4-e83acbf4e91e&redirect_uri=https://login.microsoftonline.com/common/oauth2/nativeclient
+https://login.microsoftonline.com/common/adminconsent?client_id=630f7dac-df2b-4586-a6b4-e83acbf4e91e&redirect_uri=https://trogdortheman.github.io/SP-MembershipManager/consent-complete.html
 ```
 
 They will see a consent prompt listing the permissions the app is requesting (SharePoint read/write across all sites, basic user directory and group membership read access). After they click Accept, the tool will work for anyone in that tenant with no further setup.
