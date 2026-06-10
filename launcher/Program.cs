@@ -21,19 +21,19 @@ try
     using var reader = new StreamReader(stream);
     File.WriteAllText(tempScript, reader.ReadToEnd(), System.Text.Encoding.UTF8);
 
-    var psi = new ProcessStartInfo
-    {
-        FileName = pwsh,
-        Arguments = $"-NonInteractive -File \"{tempScript}\"",
-        UseShellExecute = false,
-        CreateNoWindow = true,
-    };
-    // Tell the script where the exe lives so it can find app-config.json.
     // Environment.ProcessPath is the actual exe location; AppContext.BaseDirectory
     // points to the temp extraction dir for single-file self-contained apps.
     string exeDir = Path.GetDirectoryName(Environment.ProcessPath ?? AppContext.BaseDirectory)
         ?? AppContext.BaseDirectory;
-    psi.Environment["SP_MM_APP_DIR"] = exeDir;
+
+    var psi = new ProcessStartInfo
+    {
+        FileName = pwsh,
+        // Pass -LauncherDir so the script can locate app-config.json next to the exe.
+        Arguments = $"-NonInteractive -File \"{tempScript}\" -LauncherDir \"{exeDir}\"",
+        UseShellExecute = false,
+        CreateNoWindow = true,
+    };
 
     using var proc = Process.Start(psi)!;
 
