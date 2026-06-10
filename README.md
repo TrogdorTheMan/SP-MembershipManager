@@ -17,7 +17,7 @@ A Windows GUI tool that lets authorized users manage SharePoint Online site memb
 ## Requirements
 
 - Windows 10/11
-- PowerShell 5.1 or 7+
+- PowerShell 7+
 - [PnP.PowerShell](https://pnp.github.io/powershell/) (installed automatically on first run)
 
 No SharePoint Administrator role is required for the end user running the tool. Authentication is handled via an app-only service principal with pre-granted permissions.
