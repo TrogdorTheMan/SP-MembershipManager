@@ -10,10 +10,10 @@ logs/
 # VS Code
 .vscode/
 
-# Local config (contains client secret - never commit)
+# Local config
 app-config.json
 
-# Certificate files (contain private key - never commit)
+# Certificate files
 *.pfx
 *.cer
 
