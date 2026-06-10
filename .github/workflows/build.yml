@@ -29,7 +29,7 @@ jobs:
             -o build/output
 
       - name: Upload build artifact
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: SP-MembershipManager
           path: build/output/SP-MembershipManager.exe
