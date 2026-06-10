@@ -16,3 +16,6 @@ app-config.json
 # Certificate files (contain private key - never commit)
 *.pfx
 *.cer
+
+# User state
+last-url.txt
