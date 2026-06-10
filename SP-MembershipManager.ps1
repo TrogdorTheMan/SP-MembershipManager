@@ -340,11 +340,23 @@ function Get-UserSiteMemberships {
                 }
             }
 
-            # Check site collection administrator status (highest SP role, not in standard groups)
+            # Check site collection administrator status (highest SP role, not in standard groups).
+            # Checks both direct assignment (by LoginName) and assignment via Entra group.
             try {
                 $admins = Get-PnPSiteCollectionAdmin
-                if ($admins | Where-Object { $_.Email -ieq $UserEmail }) {
+                $directAdminLogin = "i:0#.f|membership|$UserEmail"
+                if ($admins | Where-Object { $_.LoginName -ieq $directAdminLogin }) {
                     & $AddGrant 'Admin' 'Site Admin'
+                }
+                if ($UserGroupMap -and $UserGroupMap.Count -gt 0) {
+                    foreach ($admin in $admins) {
+                        if ($admin.LoginName -match '\|([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})$') {
+                            $groupId = $Matches[1]
+                            if ($UserGroupMap.ContainsKey($groupId)) {
+                                & $AddGrant 'Admin' "via $($UserGroupMap[$groupId])"
+                            }
+                        }
+                    }
                 }
             } catch { }
 
@@ -359,8 +371,11 @@ function Get-UserSiteMemberships {
 
                 $members = Get-PnPGroupMember -Group $group
 
-                # Direct user membership
-                if ($members | Where-Object { $_.Email -ieq $UserEmail }) {
+                # Direct user membership — match on exact claims LoginName, not email,
+                # to avoid false positives when SharePoint materializes Entra group members
+                # into the SP group's user list (e.g. user in "Power Users" which is in Owners).
+                $directLoginName = "i:0#.f|membership|$UserEmail"
+                if ($members | Where-Object { $_.LoginName -ieq $directLoginName }) {
                     & $AddGrant $role 'Direct'
                 }
 
@@ -811,12 +826,14 @@ function Show-MainForm {
     $lstUsers             = New-Object System.Windows.Forms.ListBox
     $lstUsers.Location    = New-Object System.Drawing.Point(12, 92)
     $lstUsers.Size        = New-Object System.Drawing.Size(311, 340)
+    $lstUsers.Anchor      = [System.Windows.Forms.AnchorStyles]::Top -bor [System.Windows.Forms.AnchorStyles]::Left -bor [System.Windows.Forms.AnchorStyles]::Bottom
 
     # Divider
     $divider              = New-Object System.Windows.Forms.Panel
     $divider.BackColor    = [System.Drawing.Color]::LightGray
     $divider.Location     = New-Object System.Drawing.Point(335, 38)
     $divider.Size         = New-Object System.Drawing.Size(1, 410)
+    $divider.Anchor       = [System.Windows.Forms.AnchorStyles]::Top -bor [System.Windows.Forms.AnchorStyles]::Left -bor [System.Windows.Forms.AnchorStyles]::Bottom
 
     # Right panel - site access
     $lblSites             = New-Object System.Windows.Forms.Label
@@ -829,10 +846,12 @@ function Show-MainForm {
     $lblSelectedUser.Location = New-Object System.Drawing.Point(348, 60)
     $lblSelectedUser.Size = New-Object System.Drawing.Size(520, 20)
     $lblSelectedUser.ForeColor = [System.Drawing.Color]::DimGray
+    $lblSelectedUser.Anchor   = [System.Windows.Forms.AnchorStyles]::Top -bor [System.Windows.Forms.AnchorStyles]::Left -bor [System.Windows.Forms.AnchorStyles]::Right
 
     $dgv                  = New-Object System.Windows.Forms.DataGridView
     $dgv.Location         = New-Object System.Drawing.Point(348, 88)
     $dgv.Size             = New-Object System.Drawing.Size(626, 304)
+    $dgv.Anchor           = [System.Windows.Forms.AnchorStyles]::Top -bor [System.Windows.Forms.AnchorStyles]::Left -bor [System.Windows.Forms.AnchorStyles]::Right -bor [System.Windows.Forms.AnchorStyles]::Bottom
     $dgv.AllowUserToAddRows    = $false
     $dgv.AllowUserToDeleteRows = $false
     $dgv.ReadOnly              = $true
@@ -854,18 +873,21 @@ function Show-MainForm {
     $btnAdd.Location      = New-Object System.Drawing.Point(348, 400)
     $btnAdd.Size          = New-Object System.Drawing.Size(110, 30)
     $btnAdd.Enabled       = $false
+    $btnAdd.Anchor        = [System.Windows.Forms.AnchorStyles]::Bottom -bor [System.Windows.Forms.AnchorStyles]::Left
 
     $btnRemove            = New-Object System.Windows.Forms.Button
     $btnRemove.Text       = "Remove from Site"
     $btnRemove.Location   = New-Object System.Drawing.Point(466, 400)
     $btnRemove.Size       = New-Object System.Drawing.Size(130, 30)
     $btnRemove.Enabled    = $false
+    $btnRemove.Anchor     = [System.Windows.Forms.AnchorStyles]::Bottom -bor [System.Windows.Forms.AnchorStyles]::Left
 
     $btnRefreshSites      = New-Object System.Windows.Forms.Button
     $btnRefreshSites.Text     = "↻ Refresh"
     $btnRefreshSites.Location = New-Object System.Drawing.Point(604, 400)
     $btnRefreshSites.Size     = New-Object System.Drawing.Size(85, 30)
     $btnRefreshSites.Enabled  = $false
+    $btnRefreshSites.Anchor   = [System.Windows.Forms.AnchorStyles]::Bottom -bor [System.Windows.Forms.AnchorStyles]::Left
 
     $btnAbout             = New-Object System.Windows.Forms.Button
     $btnAbout.Text        = "About"
