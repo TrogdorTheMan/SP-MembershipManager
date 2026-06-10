@@ -80,11 +80,21 @@ Then replace `$script:AppClientId` near the top of `SP-MembershipManager.ps1` wi
 
 An application for free code signing through the [SignPath Foundation](https://signpath.org) open source program was submitted on 2026-06-09 and is pending review. Once approved, releases will be signed.
 
-Until signing is in place, Windows Defender may flag the executable as a false positive when building locally — this is a known issue with PowerShell-compiled executables.
+Until signing is in place, Windows Defender may flag the executable as a false positive when building locally. This is a known issue with PowerShell-compiled executables and does not affect builds produced by GitHub Actions.
 
-**Workaround 1 (easiest):** Download the exe from the [Actions tab](https://github.com/TrogdorTheMan/SP-MembershipManager/actions) or a [release](https://github.com/TrogdorTheMan/SP-MembershipManager/releases). CI builds run on GitHub's runners where this is not an issue.
+**Option 1 — Build via GitHub Actions**
 
-**Workaround 2 (local builds):** Add a Defender exclusion for the PS12EXE module folder before running `build.ps1`:
+This repo includes a workflow at `.github/workflows/build.yml` that builds the exe on a GitHub-hosted Windows runner. To use it on a fork:
+
+1. Fork the repo and go to **Actions** in your fork — enable workflows if prompted
+2. Push a commit to `main` (or trigger the workflow manually via **Run workflow**)
+3. Once the run completes, click into it and download the `SP-MembershipManager` artifact
+
+Creating a release will also attach the exe directly to the release assets.
+
+**Option 2 — Local build with Defender exclusion**
+
+Add an exclusion for the PS12EXE module folder before running `build.ps1`:
 
 **Windows Security → Virus & threat protection → Manage settings → Add or remove exclusions → Add folder → `%USERPROFILE%\Documents\PowerShell\Modules\PS12EXE`**
 
