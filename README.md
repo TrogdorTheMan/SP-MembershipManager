@@ -22,6 +22,10 @@ A Windows GUI tool that lets authorized users manage SharePoint Online site memb
 
 No SharePoint Administrator role is required for the end user running the tool. Authentication is handled via an app-only service principal with pre-granted permissions.
 
+Startup shows a loading screen while the tool connects and fetches the site list in the background, so the main window opens ready to use.
+
+The certificate password in `app-config.json` is encrypted with Windows DPAPI on first run and replaced with a ciphertext blob. The plaintext password never persists on disk after that point. Encryption is tied to the Windows user account that performed the first run — the password cannot be decrypted by a different user or on a different machine.
+
 Site membership lookups run in parallel (up to 8 concurrent connections) using PowerShell runspaces, keeping scan times low even across large tenants. The UI stays responsive during scans.
 
 ## Running from source
@@ -65,8 +69,6 @@ Then replace `$script:AppClientId` near the top of `SP-MembershipManager.ps1` wi
 
 ## Roadmap
 
-- **DPAPI credential storage** — encrypt the cert password in `app-config.json` using Windows DPAPI, tied to the machine/user that set it up
-- **Email search** — extend user search to match on email address in addition to display name
 - **First-run consent check** — detect when admin consent hasn't been granted in the target tenant and surface the consent URL directly in the error dialog
 - **Critical site flagging** — designate sensitive sites in config so they render with a red background in the site access grid as a visual warning
 - **Per-client build config** — bake a locked admin URL, critical site list, and feature flags into each compiled exe at build time so a client's exe can't be pointed at the wrong tenant

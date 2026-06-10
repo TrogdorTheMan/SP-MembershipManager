@@ -1,5 +1,6 @@
 {
   "CertificatePath": ".\\sp-mm.pfx",
   "CertificatePassword": "YOUR_CERT_PASSWORD_HERE",
+  "CertificatePasswordEncrypted": false,
   "Tenant": "yourtenant.onmicrosoft.com"
 }

@@ -47,6 +47,30 @@ function Write-Log {
 }
 
 # ---------------------------------------------------------------------------
+# DPAPI helpers
+# ---------------------------------------------------------------------------
+
+function Protect-String {
+    param([string]$Plaintext)
+    Add-Type -AssemblyName System.Security
+    $bytes     = [System.Text.Encoding]::UTF8.GetBytes($Plaintext)
+    $protected = [System.Security.Cryptography.ProtectedData]::Protect(
+                     $bytes, $null,
+                     [System.Security.Cryptography.DataProtectionScope]::CurrentUser)
+    return [Convert]::ToBase64String($protected)
+}
+
+function Unprotect-String {
+    param([string]$Base64)
+    Add-Type -AssemblyName System.Security
+    $bytes      = [Convert]::FromBase64String($Base64)
+    $plainBytes = [System.Security.Cryptography.ProtectedData]::Unprotect(
+                      $bytes, $null,
+                      [System.Security.Cryptography.DataProtectionScope]::CurrentUser)
+    return [System.Text.Encoding]::UTF8.GetString($plainBytes)
+}
+
+# ---------------------------------------------------------------------------
 # App registration
 #
 # Client ID is public and safe to commit. The client secret is loaded from a
@@ -96,9 +120,39 @@ function Load-AppConfig {
             "Configuration Error", 'OK', 'Error') | Out-Null
         exit
     }
-    $script:CertPath          = $certPath
-    $script:CertPasswordPlain = $cfg.CertificatePassword
-    $script:CertPassword      = ConvertTo-SecureString $cfg.CertificatePassword -AsPlainText -Force
+    $script:CertPath = $certPath
+
+    # DPAPI: if password is plaintext, encrypt it in place and save back to disk.
+    # On subsequent runs the encrypted blob is decrypted transparently.
+    # Encryption is CurrentUser-scoped -- tied to the Windows account that first ran the tool.
+    $isEncrypted = $cfg.PSObject.Properties.Item('CertificatePasswordEncrypted') -and
+                   $cfg.CertificatePasswordEncrypted -eq $true
+    if ($isEncrypted) {
+        try {
+            $plainPassword = Unprotect-String -Base64 $cfg.CertificatePassword
+        } catch {
+            [System.Windows.Forms.MessageBox]::Show(
+                "Could not decrypt the certificate password in app-config.json.`n`n" +
+                "This usually means the config was created on a different machine or user account.`n`n" +
+                "Set CertificatePasswordEncrypted to false and restore the plaintext password, then re-run to re-encrypt for this account.",
+                "Decryption Failed", 'OK', 'Error') | Out-Null
+            exit
+        }
+    } else {
+        $plainPassword = $cfg.CertificatePassword
+        $encrypted     = Protect-String -Plaintext $plainPassword
+        $cfg.CertificatePassword = $encrypted
+        if ($cfg.PSObject.Properties.Item('CertificatePasswordEncrypted')) {
+            $cfg.CertificatePasswordEncrypted = $true
+        } else {
+            $cfg | Add-Member -MemberType NoteProperty -Name 'CertificatePasswordEncrypted' -Value $true
+        }
+        $cfg | ConvertTo-Json | Set-Content $script:ConfigFile -Encoding UTF8
+        Write-Log "Certificate password encrypted with DPAPI and saved to app-config.json."
+    }
+
+    $script:CertPasswordPlain = $plainPassword
+    $script:CertPassword      = ConvertTo-SecureString $plainPassword -AsPlainText -Force
     $script:TenantName        = $cfg.Tenant
 }
 
