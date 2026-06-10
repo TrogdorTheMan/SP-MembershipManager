@@ -389,6 +389,64 @@ function Remove-UserFromSite {
 # UI
 # ---------------------------------------------------------------------------
 
+function Show-CountdownDialog {
+    param(
+        [string]$Message,
+        [string]$Title   = 'Success',
+        [int]$Seconds    = 5
+    )
+
+    $dlg                  = New-Object System.Windows.Forms.Form
+    $dlg.Text             = $Title
+    $dlg.Size             = New-Object System.Drawing.Size(400, 165)
+    $dlg.StartPosition    = 'CenterScreen'
+    $dlg.FormBorderStyle  = 'FixedDialog'
+    $dlg.MaximizeBox      = $false
+    $dlg.MinimizeBox      = $false
+    # Use Tag to store remaining seconds — avoids closure scoping issues
+    $dlg.Tag              = $Seconds
+
+    $ico              = New-Object System.Windows.Forms.PictureBox
+    $ico.Image        = [System.Drawing.SystemIcons]::Information.ToBitmap()
+    $ico.Size         = New-Object System.Drawing.Size(32, 32)
+    $ico.Location     = New-Object System.Drawing.Point(16, 20)
+    $ico.SizeMode     = 'AutoSize'
+
+    $lbl              = New-Object System.Windows.Forms.Label
+    $lbl.Text         = $Message
+    $lbl.Location     = New-Object System.Drawing.Point(58, 16)
+    $lbl.Size         = New-Object System.Drawing.Size(320, 60)
+    $lbl.AutoSize     = $false
+
+    $btn              = New-Object System.Windows.Forms.Button
+    $btn.Text         = "OK ($Seconds)"
+    $btn.Size         = New-Object System.Drawing.Size(110, 28)
+    $btn.Location     = New-Object System.Drawing.Point(270, 95)
+    $btn.Enabled      = $false
+    $btn.Add_Click({ $dlg.Close() })
+
+    $timer            = New-Object System.Windows.Forms.Timer
+    $timer.Interval   = 1000
+    $timer.Add_Tick({
+        $rem = [int]$dlg.Tag - 1
+        $dlg.Tag = $rem
+        if ($rem -le 0) {
+            $timer.Stop()
+            $btn.Text    = 'OK'
+            $btn.Enabled = $true
+        } else {
+            $btn.Text = "OK ($rem)"
+        }
+    })
+
+    $dlg.Controls.AddRange(@($ico, $lbl, $btn))
+    $dlg.Add_Shown({ $timer.Start() })
+    $dlg.ShowDialog() | Out-Null
+    $timer.Stop()
+    $timer.Dispose()
+    $dlg.Dispose()
+}
+
 function Show-AboutDialog {
     param([System.Windows.Forms.Form]$Owner = $null)
 
@@ -881,13 +939,10 @@ function Show-MainForm {
             & $SetStatus "Adding $($script:SelectedUser.DisplayName) to $($site.Title) as $role..."
             try {
                 Add-UserToSite -SiteUrl $site.Url -UserEmail $script:SelectedUser.Email -Role $role
-                & $SetStatus "Added $($script:SelectedUser.DisplayName) to $($site.Title)."
-                [System.Windows.Forms.MessageBox]::Show(
-                    "$($script:SelectedUser.DisplayName) was successfully added to $($site.Title) as $role.",
-                    "Success", 'OK', 'Information') | Out-Null
-                # Refresh memberships
-                $script:Memberships = @(Get-UserSiteMemberships -UserEmail $script:SelectedUser.Email -AllSites $script:AllSites -LogBox $rtbLog)
-                & $RefreshGrid
+                & $SetStatus "Added $($script:SelectedUser.DisplayName) to $($site.Title). Use Refresh to verify."
+                Show-CountdownDialog `
+                    -Message "$($script:SelectedUser.DisplayName) was added to $($site.Title) as $role.`n`nSharePoint needs a moment to propagate the change. Wait for the countdown before refreshing." `
+                    -Title 'Success'
             } catch {
                 & $SetStatus "Failed to add user: $_"
                 [System.Windows.Forms.MessageBox]::Show($_.ToString(), "Error", 'OK', 'Error') | Out-Null
@@ -912,17 +967,14 @@ function Show-MainForm {
         } catch {
             $removeError = $_
         }
-        # Always refresh so the grid reflects actual state
-        $script:Memberships = @(Get-UserSiteMemberships -UserEmail $script:SelectedUser.Email -AllSites $script:AllSites -LogBox $rtbLog)
-        & $RefreshGrid
         if ($removeError) {
             & $SetStatus "Failed to remove user: $removeError"
             [System.Windows.Forms.MessageBox]::Show($removeError.ToString(), "Error", 'OK', 'Error') | Out-Null
         } else {
-            & $SetStatus "Removed $($script:SelectedUser.DisplayName) from $($mem.SiteName)."
-            [System.Windows.Forms.MessageBox]::Show(
-                "$($script:SelectedUser.DisplayName) was successfully removed from $($mem.SiteName).",
-                "Success", 'OK', 'Information') | Out-Null
+            & $SetStatus "Removed $($script:SelectedUser.DisplayName) from $($mem.SiteName). Use Refresh to verify."
+            Show-CountdownDialog `
+                -Message "$($script:SelectedUser.DisplayName) was removed from $($mem.SiteName).`n`nSharePoint needs a moment to propagate the change. Wait for the countdown before refreshing." `
+                -Title 'Success'
         }
     })
 
