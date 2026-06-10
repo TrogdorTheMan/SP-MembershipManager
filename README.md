@@ -79,6 +79,7 @@ Then replace `$script:AppClientId` near the top of `SP-MembershipManager.ps1` wi
 
 ## Roadmap
 
+- **Group membership expansion** — users who have access via an Entra ID security group (e.g. "SharePoint Power Users") are not currently detected; this will resolve group membership transitively and show "Member (via GroupName)" in the site access grid
 - **First-run consent check** — detect when admin consent hasn't been granted in the target tenant and surface the consent URL directly in the error dialog
 - **Critical site flagging** — designate sensitive sites in config so they render with a red background in the site access grid as a visual warning
 - **Per-client build config** — bake a locked admin URL, critical site list, and feature flags into each compiled exe at build time so a client's exe can't be pointed at the wrong tenant
