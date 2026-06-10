@@ -13,29 +13,21 @@ A Windows GUI tool that lets authorized users manage SharePoint Online site memb
 ## Architecture
 
 ```mermaid
-flowchart LR
-    subgraph exe["SP-MembershipManager.exe (end user machine)"]
-        UI["PowerShell + WinForms UI"]
-        PnP["PnP.PowerShell"]
-        CFG["app-config.json"]
-        CERT["sp-mm.pfx (cert)"]
-    end
+flowchart TD
+    EXE["SP-MembershipManager.exe\nPowerShell + WinForms · PnP.PowerShell\napp-config.json · sp-mm.pfx"]
 
-    subgraph your["TrogdorTheMan's Azure Tenant"]
-        APP["Entra ID App Registration\nClient ID + Certificate\n(multi-tenant, registered once)"]
-    end
+    APP["Entra ID App Registration\nTrogdorTheMan's Azure Tenant\nClient ID + Certificate · multi-tenant"]
 
-    subgraph client["Client Tenant (contoso)"]
-        SP_svc["Service Principal\n(created by one-time admin consent)"]
-        SPO["SharePoint Online\nSites.FullControl.All"]
-        GRAPH["Microsoft Graph\nUser.ReadBasic.All"]
-    end
+    SVC["Service Principal\nClient Tenant - contoso\none-time admin consent"]
 
-    exe -- "cert auth" --> APP
-    APP -. "trust" .-> SP_svc
-    SP_svc --> SPO
-    SP_svc --> GRAPH
-    exe -- "PnP operations" --> client
+    SPO["SharePoint Online\nSites.FullControl.All"]
+    GRP["Microsoft Graph\nUser.ReadBasic.All"]
+
+    EXE -- "cert auth" --> APP
+    APP -. "trusted in tenant" .-> SVC
+    SVC --> SPO
+    SVC --> GRP
+    EXE -- "PnP operations" --> SVC
 ```
 
 ## Requirements
