@@ -23,12 +23,16 @@ $outDir  = Join-Path $root 'build\output'
 $outExe  = Join-Path $outDir 'SP-MembershipManager.exe'
 $iconFile = Join-Path $root 'assets\icon.ico'
 
-# Ensure ps2exe is available
-if (-not (Get-Module -ListAvailable -Name ps2exe)) {
-    Write-Host "Installing ps2exe..." -ForegroundColor Yellow
-    Install-Module -Name ps2exe -Scope CurrentUser -Force
+# Prefer PS12EXE (PS7-capable fork) over ps2exe
+if (Get-Module -ListAvailable -Name PS12EXE) {
+    Import-Module PS12EXE
+} elseif (Get-Module -ListAvailable -Name ps2exe) {
+    Import-Module ps2exe
+} else {
+    Write-Host "Installing PS12EXE..." -ForegroundColor Yellow
+    Install-Module -Name PS12EXE -Scope CurrentUser -Force
+    Import-Module PS12EXE
 }
-Import-Module ps2exe
 
 # Create output directory
 if (-not (Test-Path $outDir)) {
@@ -38,16 +42,11 @@ if (-not (Test-Path $outDir)) {
 Write-Host "Building $outExe..." -ForegroundColor Cyan
 
 $params = @{
-    inputFile   = $src
-    outputFile  = $outExe
-    title       = 'SP Membership Manager'
-    product     = 'SP-MembershipManager'
-    description = 'Manage SharePoint Online site membership'
-    copyright   = 'Copyright (c) 2026 Cory "TrogdorTheMan" Francis - MIT License'
-    version     = '1.0.0'
-    requireAdmin = $false
-    noConsole   = $true      # WinForms app - suppress console window
-    x64         = $true
+    inputFile  = $src
+    outputFile = $outExe
+    noConsole  = $true
+    x64        = $true
+    verbose    = $true
 }
 
 # Include icon if it exists
@@ -55,7 +54,11 @@ if (Test-Path $iconFile) {
     $params['iconFile'] = $iconFile
 }
 
-Invoke-ps2exe @params
+if (Get-Module PS12EXE) {
+    ps12exe @params
+} else {
+    Invoke-ps2exe @params
+}
 
 if (Test-Path $outExe) {
     $size = [math]::Round((Get-Item $outExe).Length / 1KB, 1)
