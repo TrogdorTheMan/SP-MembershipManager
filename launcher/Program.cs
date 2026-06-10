@@ -28,8 +28,12 @@ try
         UseShellExecute = false,
         CreateNoWindow = true,
     };
-    // Tell the script where the exe lives so it can find app-config.json
-    psi.Environment["SP_MM_APP_DIR"] = AppContext.BaseDirectory.TrimEnd('\\');
+    // Tell the script where the exe lives so it can find app-config.json.
+    // Environment.ProcessPath is the actual exe location; AppContext.BaseDirectory
+    // points to the temp extraction dir for single-file self-contained apps.
+    string exeDir = Path.GetDirectoryName(Environment.ProcessPath ?? AppContext.BaseDirectory)
+        ?? AppContext.BaseDirectory;
+    psi.Environment["SP_MM_APP_DIR"] = exeDir;
 
     using var proc = Process.Start(psi)!;
 
