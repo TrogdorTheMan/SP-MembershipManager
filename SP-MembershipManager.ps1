@@ -14,6 +14,12 @@
     Repository: https://github.com/TrogdorTheMan/SP-MembershipManager
 #>
 
+param(
+    # Passed by the C# launcher so the script can locate app-config.json
+    # next to the exe rather than in the temp folder it was extracted to.
+    [string]$LauncherDir = ''
+)
+
 Set-StrictMode -Version Latest
 $ErrorActionPreference = 'Stop'
 
@@ -87,11 +93,10 @@ $script:CertPath          = ""
 $script:CertPassword      = $null
 $script:CertPasswordPlain = ""
 
-# When running via the C# launcher, SP_MM_APP_DIR is set to the exe's directory.
+# When running via the C# launcher, $LauncherDir is the exe's directory.
 # When running directly as a .ps1, use $PSScriptRoot.
-# Fall back to the process base directory for other compiled scenarios.
-$script:ScriptRoot = if ($env:SP_MM_APP_DIR) {
-    $env:SP_MM_APP_DIR
+$script:ScriptRoot = if ($LauncherDir) {
+    $LauncherDir
 } elseif ($PSScriptRoot) {
     $PSScriptRoot
 } else {
