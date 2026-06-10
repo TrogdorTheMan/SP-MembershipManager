@@ -47,16 +47,49 @@ function Write-Log {
 }
 
 # ---------------------------------------------------------------------------
+# App registration
+#
+# Client ID is public and safe to commit. The client secret is loaded from a
+# local config file (app-config.json) that is gitignored and must be created
+# before running. See README for setup instructions.
+#
+# If you fork this repo, replace AppClientId with your own app registration
+# and create your own app-config.json with your secret.
+# ---------------------------------------------------------------------------
+
+$script:AppClientId = "630f7dac-df2b-4586-a6b4-e83acbf4e91e"
+
+$script:ConfigFile = Join-Path $PSScriptRoot "app-config.json"
+
+function Load-AppConfig {
+    if (-not (Test-Path $script:ConfigFile)) {
+        [System.Windows.Forms.MessageBox]::Show(
+            "app-config.json not found next to the script.`n`nCreate it with the following content:`n`n{ `"ClientSecret`": `"YOUR_SECRET_HERE`" }",
+            "Configuration Missing", 'OK', 'Error') | Out-Null
+        exit
+    }
+    $cfg = Get-Content $script:ConfigFile -Raw | ConvertFrom-Json
+    if (-not $cfg.ClientSecret) {
+        [System.Windows.Forms.MessageBox]::Show(
+            "app-config.json is missing the ClientSecret field.",
+            "Configuration Error", 'OK', 'Error') | Out-Null
+        exit
+    }
+    $script:AppClientSecret = $cfg.ClientSecret
+}
+
+# ---------------------------------------------------------------------------
 # SharePoint operations
 # ---------------------------------------------------------------------------
 
-# PnP Management Shell - well-known public multi-tenant app, no custom registration needed.
-# First-time use in a tenant requires an admin to grant consent via the interactive login prompt.
-$script:PnPClientId = "31359c7f-bd7e-475c-86db-fdb8c937548e"
+function Connect-Site {
+    param([string]$Url)
+    Connect-PnPOnline -Url $Url -ClientId $script:AppClientId -ClientSecret $script:AppClientSecret
+}
 
 function Connect-Tenant {
     param([string]$AdminUrl)
-    Connect-PnPOnline -Url $AdminUrl -Interactive -ClientId $script:PnPClientId
+    Connect-Site -Url $AdminUrl
 }
 
 function Get-AllSites {
@@ -93,7 +126,7 @@ function Get-UserSiteMemberships {
         }
 
         try {
-            Connect-PnPOnline -Url $site.Url -Interactive -ClientId $script:PnPClientId -WarningAction SilentlyContinue
+            Connect-Site -Url $site.Url
 
             $groups = Get-PnPGroup
             foreach ($group in $groups) {
@@ -123,7 +156,7 @@ function Get-UserSiteMemberships {
 
 function Add-UserToSite {
     param([string]$SiteUrl, [string]$UserEmail, [string]$Role)
-    Connect-PnPOnline -Url $SiteUrl -Interactive -ClientId $script:PnPClientId -WarningAction SilentlyContinue
+    Connect-Site -Url $SiteUrl
     $groups = Get-PnPGroup
     $group  = $groups | Where-Object { $_.Title -like "* $Role`s" -or $_.Title -like "* ${Role}s" } | Select-Object -First 1
     if (-not $group) { throw "Could not find $Role group for site." }
@@ -132,7 +165,7 @@ function Add-UserToSite {
 
 function Remove-UserFromSite {
     param([string]$SiteUrl, [string]$UserEmail, [string]$Role)
-    Connect-PnPOnline -Url $SiteUrl -Interactive -ClientId $script:PnPClientId -WarningAction SilentlyContinue
+    Connect-Site -Url $SiteUrl
     $groups = Get-PnPGroup
     $group  = $groups | Where-Object { $_.Title -like "* $Role`s" -or $_.Title -like "* ${Role}s" } | Select-Object -First 1
     if (-not $group) { throw "Could not find $Role group for site." }
@@ -142,6 +175,50 @@ function Remove-UserFromSite {
 # ---------------------------------------------------------------------------
 # UI
 # ---------------------------------------------------------------------------
+
+function Show-AdminUrlDialog {
+    Add-Type -AssemblyName System.Windows.Forms
+    Add-Type -AssemblyName System.Drawing
+
+    $dlg = New-Object System.Windows.Forms.Form
+    $dlg.Text            = "SP Membership Manager"
+    $dlg.Size            = New-Object System.Drawing.Size(440, 150)
+    $dlg.FormBorderStyle = 'FixedDialog'
+    $dlg.StartPosition   = 'CenterScreen'
+    $dlg.MaximizeBox     = $false
+    $dlg.MinimizeBox     = $false
+
+    $lbl = New-Object System.Windows.Forms.Label
+    $lbl.Text     = "SharePoint Admin URL:"
+    $lbl.Location = New-Object System.Drawing.Point(12, 16)
+    $lbl.AutoSize = $true
+
+    $txt = New-Object System.Windows.Forms.TextBox
+    $txt.Location        = New-Object System.Drawing.Point(12, 36)
+    $txt.Size            = New-Object System.Drawing.Size(398, 23)
+    $txt.PlaceholderText = "https://yourtenant-admin.sharepoint.com"
+
+    $btnOk = New-Object System.Windows.Forms.Button
+    $btnOk.Text         = "Connect"
+    $btnOk.Location     = New-Object System.Drawing.Point(254, 72)
+    $btnOk.Size         = New-Object System.Drawing.Size(75, 28)
+    $btnOk.DialogResult = 'OK'
+
+    $btnCx = New-Object System.Windows.Forms.Button
+    $btnCx.Text         = "Cancel"
+    $btnCx.Location     = New-Object System.Drawing.Point(335, 72)
+    $btnCx.Size         = New-Object System.Drawing.Size(75, 28)
+    $btnCx.DialogResult = 'Cancel'
+
+    $dlg.AcceptButton = $btnOk
+    $dlg.CancelButton = $btnCx
+    $dlg.Controls.AddRange(@($lbl, $txt, $btnOk, $btnCx))
+
+    if ($dlg.ShowDialog() -eq 'OK') {
+        return $txt.Text.Trim()
+    }
+    return $null
+}
 
 function Show-MainForm {
     param([string]$AdminUrl)
@@ -305,6 +382,8 @@ function Show-MainForm {
         $lblSelectedUser.Text = ""
         $script:UserResults = @()
         try {
+            # Re-connect to admin URL for search (PnP context may have shifted to a site URL)
+            Connect-Tenant -AdminUrl $AdminUrl
             $script:UserResults = @(Search-Users -Query $query)
             foreach ($u in $script:UserResults) {
                 [void]$lstUsers.Items.Add("$($u.DisplayName) ($($u.Email))")
@@ -426,7 +505,11 @@ function Show-MainForm {
 
 Ensure-PnPModule
 
-$adminUrl = Read-Host "Enter your SharePoint Admin URL (e.g. https://yourtenant-admin.sharepoint.com)"
+Add-Type -AssemblyName System.Windows.Forms
+
+Load-AppConfig
+
+$adminUrl = Show-AdminUrlDialog
 if (-not $adminUrl) { exit }
 
 Show-MainForm -AdminUrl $adminUrl

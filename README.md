@@ -15,7 +15,8 @@ A Windows GUI tool that lets authorized users manage SharePoint Online site memb
 - Windows 10/11
 - PowerShell 5.1+
 - [PnP.PowerShell](https://pnp.github.io/powershell/) (installed automatically on first run)
-- An account with SharePoint Administrator role in the target tenant
+
+No SharePoint Administrator role is required for the end user running the tool. Authentication is handled via an app-only service principal with pre-granted permissions.
 
 ## Running from source
 
@@ -23,7 +24,7 @@ A Windows GUI tool that lets authorized users manage SharePoint Online site memb
 .\SP-MembershipManager.ps1
 ```
 
-You will be prompted for your SharePoint Admin URL (e.g. `https://yourtenant-admin.sharepoint.com`) and then asked to sign in interactively.
+A dialog will prompt for your SharePoint Admin URL (e.g. `https://yourtenant-admin.sharepoint.com`).
 
 ## Building a standalone .exe
 
@@ -37,8 +38,24 @@ The compiled executable is written to `build\output\SP-MembershipManager.exe`. E
 
 ## Deploying to a new tenant
 
-1. Have a tenant admin sign in when prompted on first launch. PnP.PowerShell will handle the interactive login flow and prompt for admin consent if needed.
-2. No app registrations or config files required.
+Before first use, a Global Admin in the target tenant needs to grant consent for the app. This is a one-time step per tenant.
+
+Have the Global Admin visit this URL and sign in with their admin account:
+
+```
+https://login.microsoftonline.com/common/adminconsent?client_id=630f7dac-df2b-4586-a6b4-e83acbf4e91e
+```
+
+They will see a consent prompt listing the permissions the app is requesting (SharePoint read/write across all sites, basic user directory access). After they click Accept, the tool will work for anyone in that tenant with no further setup.
+
+## Using your own app registration
+
+If you fork this repo, you can substitute your own multi-tenant Entra ID app registration. Register an app at [portal.azure.com](https://portal.azure.com) with:
+
+- Supported account types: Accounts in any organizational directory (Multitenant)
+- Application permissions: `SharePoint > Sites.FullControl.All`, `Microsoft Graph > User.ReadBasic.All`
+
+Then replace `$script:AppClientId` and `$script:AppClientSecret` near the top of `SP-MembershipManager.ps1` with your own values.
 
 ## License
 
