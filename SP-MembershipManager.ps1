@@ -153,12 +153,15 @@ function Get-AllSites {
 
 function Search-Users {
     param([string]$Query)
-    $results = Submit-PnPSearchQuery -Query "$Query" -SourceId "b09a7990-05ea-4af9-81ef-edfab16c4e31" -SelectProperties "AccountName,PreferredName,WorkEmail" -MaxResults 20
-    $users = foreach ($row in $results.ResultRows) {
+    # Use Graph /users with $search -- requires ConsistencyLevel: eventual header.
+    # Works with app-only cert auth; Submit-PnPSearchQuery requires a user context.
+    $url = "users?`$search=`"displayName:$Query`"&`$select=displayName,mail,userPrincipalName&`$top=20&`$count=true"
+    $response = Invoke-PnPGraphMethod -Url $url -Method Get -AdditionalHeaders @{ "ConsistencyLevel" = "eventual" }
+    $users = foreach ($u in $response.value) {
         [PSCustomObject]@{
-            DisplayName = $row['PreferredName']
-            Email       = $row['WorkEmail']
-            Account     = $row['AccountName']
+            DisplayName = $u.displayName
+            Email       = if ($u.mail) { $u.mail } else { $u.userPrincipalName }
+            Account     = $u.userPrincipalName
         }
     }
     return $users | Where-Object { $_.Email }
@@ -230,6 +233,51 @@ function Remove-UserFromSite {
 # UI
 # ---------------------------------------------------------------------------
 
+function Show-AboutDialog {
+    param([System.Windows.Forms.Form]$Owner = $null)
+
+    $about = New-Object System.Windows.Forms.Form
+    $about.Text            = "About SP Membership Manager"
+    $about.Size            = New-Object System.Drawing.Size(480, 220)
+    $about.FormBorderStyle = 'FixedDialog'
+    $about.StartPosition   = if ($Owner) { 'CenterParent' } else { 'CenterScreen' }
+    $about.MaximizeBox     = $false
+    $about.MinimizeBox     = $false
+
+    $lblName = New-Object System.Windows.Forms.Label
+    $lblName.Text      = "SP Membership Manager"
+    $lblName.Font      = New-Object System.Drawing.Font('Segoe UI', 11, [System.Drawing.FontStyle]::Bold)
+    $lblName.Location  = New-Object System.Drawing.Point(20, 20)
+    $lblName.AutoSize  = $true
+
+    $lblAuthor = New-Object System.Windows.Forms.Label
+    $lblAuthor.Text     = "Cory `"TrogdorTheMan`" Francis"
+    $lblAuthor.Location = New-Object System.Drawing.Point(20, 52)
+    $lblAuthor.AutoSize = $true
+
+    $lblYear = New-Object System.Windows.Forms.Label
+    $lblYear.Text      = "$(Get-Date -Format 'yyyy')  |  MIT License"
+    $lblYear.Location  = New-Object System.Drawing.Point(20, 74)
+    $lblYear.AutoSize  = $true
+    $lblYear.ForeColor = [System.Drawing.Color]::DimGray
+
+    $lnkRepo = New-Object System.Windows.Forms.LinkLabel
+    $lnkRepo.Text     = "https://github.com/TrogdorTheMan/SP-MembershipManager"
+    $lnkRepo.Location = New-Object System.Drawing.Point(20, 104)
+    $lnkRepo.AutoSize = $true
+    $lnkRepo.Add_LinkClicked({ Start-Process $lnkRepo.Text })
+
+    $btnClose = New-Object System.Windows.Forms.Button
+    $btnClose.Text         = "Close"
+    $btnClose.Location     = New-Object System.Drawing.Point(375, 148)
+    $btnClose.Size         = New-Object System.Drawing.Size(75, 28)
+    $btnClose.DialogResult = 'OK'
+
+    $about.AcceptButton = $btnClose
+    $about.Controls.AddRange(@($lblName, $lblAuthor, $lblYear, $lnkRepo, $btnClose))
+    if ($Owner) { [void]$about.ShowDialog($Owner) } else { [void]$about.ShowDialog() }
+}
+
 function Show-AdminUrlDialog {
     Add-Type -AssemblyName System.Windows.Forms
     Add-Type -AssemblyName System.Drawing
@@ -265,9 +313,15 @@ function Show-AdminUrlDialog {
     $btnCx.Size         = New-Object System.Drawing.Size(75, 28)
     $btnCx.DialogResult = 'Cancel'
 
+    $btnAboutDlg = New-Object System.Windows.Forms.Button
+    $btnAboutDlg.Text     = "About"
+    $btnAboutDlg.Location = New-Object System.Drawing.Point(12, 72)
+    $btnAboutDlg.Size     = New-Object System.Drawing.Size(75, 28)
+    $btnAboutDlg.Add_Click({ Show-AboutDialog -Owner $dlg })
+
     $dlg.AcceptButton = $btnOk
     $dlg.CancelButton = $btnCx
-    $dlg.Controls.AddRange(@($lbl, $txt, $btnOk, $btnCx))
+    $dlg.Controls.AddRange(@($lbl, $txt, $btnOk, $btnCx, $btnAboutDlg))
 
     if ($dlg.ShowDialog() -eq 'OK') {
         $url = $txt.Text.Trim()
@@ -372,6 +426,12 @@ function Show-MainForm {
     $btnRemove.Size       = New-Object System.Drawing.Size(130, 30)
     $btnRemove.Enabled    = $false
 
+    $btnAbout             = New-Object System.Windows.Forms.Button
+    $btnAbout.Text        = "About"
+    $btnAbout.Location    = New-Object System.Drawing.Point(897, 400)
+    $btnAbout.Size        = New-Object System.Drawing.Size(75, 30)
+    $btnAbout.Anchor      = 'Bottom,Right'
+
     # Log box
     $rtbLog               = New-Object System.Windows.Forms.RichTextBox
     $rtbLog.Location      = New-Object System.Drawing.Point(12, 450)
@@ -392,7 +452,7 @@ function Show-MainForm {
     $form.Controls.AddRange(@(
         $lblSignedIn, $lblSearch, $txtSearch, $btnSearch, $lstUsers,
         $divider, $lblSites, $lblSelectedUser, $dgv,
-        $btnAdd, $btnRemove, $rtbLog, $status
+        $btnAdd, $btnRemove, $btnAbout, $rtbLog, $status
     ))
 
     # Helper: update status bar and log
@@ -552,6 +612,9 @@ function Show-MainForm {
             [System.Windows.Forms.MessageBox]::Show($_.ToString(), "Error", 'OK', 'Error') | Out-Null
         }
     })
+
+    # About dialog
+    $btnAbout.Add_Click({ Show-AboutDialog -Owner $form })
 
     [void]$form.ShowDialog()
 }

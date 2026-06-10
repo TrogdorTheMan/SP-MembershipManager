@@ -47,7 +47,7 @@ Before first use, a Global Admin in the target tenant needs to grant consent for
 Have the Global Admin visit this URL and sign in with their admin account:
 
 ```
-https://login.microsoftonline.com/common/adminconsent?client_id=630f7dac-df2b-4586-a6b4-e83acbf4e91e
+https://login.microsoftonline.com/common/adminconsent?client_id=630f7dac-df2b-4586-a6b4-e83acbf4e91e&redirect_uri=https://login.microsoftonline.com/common/oauth2/nativeclient
 ```
 
 They will see a consent prompt listing the permissions the app is requesting (SharePoint read/write across all sites, basic user directory access). After they click Accept, the tool will work for anyone in that tenant with no further setup.
@@ -59,7 +59,7 @@ If you fork this repo, you can substitute your own multi-tenant Entra ID app reg
 - Supported account types: Accounts in any organizational directory (Multitenant)
 - Application permissions: `SharePoint > Sites.FullControl.All`, `Microsoft Graph > User.ReadBasic.All`, `Microsoft Graph > Sites.Read.All`
 
-Then replace `$script:AppClientId` and `$script:AppClientSecret` near the top of `SP-MembershipManager.ps1` with your own values.
+Then replace `$script:AppClientId` near the top of `SP-MembershipManager.ps1` with your own Client ID, generate a certificate for your app registration, and update `app-config.json` with the cert path and your tenant name.
 
 ## License
 
