@@ -326,44 +326,85 @@ function Get-UserSiteMemberships {
                 -WarningAction SilentlyContinue `
                 -ErrorAction Stop
 
+            # Role priority for resolving the highest grant
+            $priority = @{ 'Admin' = 4; 'Owner' = 3; 'Member' = 2; 'Visitor' = 1 }
+
+            # Collect all (Role, Source) grants — deduplicated via a string key set
+            $grantKeys = [System.Collections.Generic.HashSet[string]]::new()
+            $grantList = [System.Collections.Generic.List[PSCustomObject]]::new()
+
+            $AddGrant = {
+                param($r, $s)
+                if ($grantKeys.Add("$r|$s")) {
+                    $grantList.Add([PSCustomObject]@{ Role = $r; Source = $s })
+                }
+            }
+
+            # Check site collection administrator status (highest SP role, not in standard groups)
+            try {
+                $admins = Get-PnPSiteCollectionAdmin
+                if ($admins | Where-Object { $_.Email -ieq $UserEmail }) {
+                    & $AddGrant 'Admin' 'Site Admin'
+                }
+            } catch { }
+
+            # Check standard Owners / Members / Visitors groups
             $groups = Get-PnPGroup
             foreach ($group in $groups) {
                 $role = $null
-                if ($group.Title -like '* Owners')        { $role = 'Owner'   }
-                elseif ($group.Title -like '* Members')   { $role = 'Member'  }
-                elseif ($group.Title -like '* Visitors')  { $role = 'Visitor' }
+                if ($group.Title -like '* Owners')       { $role = 'Owner'   }
+                elseif ($group.Title -like '* Members')  { $role = 'Member'  }
+                elseif ($group.Title -like '* Visitors') { $role = 'Visitor' }
                 if (-not $role) { continue }
 
                 $members = Get-PnPGroupMember -Group $group
 
-                # Direct membership check
-                if ($members | Where-Object { $_.Email -eq $UserEmail }) {
-                    return [PSCustomObject]@{
-                        SiteName = $SiteTitle
-                        SiteUrl  = $SiteUrl
-                        Role     = $role
-                        ViaGroup = $null
-                    }
+                # Direct user membership
+                if ($members | Where-Object { $_.Email -ieq $UserEmail }) {
+                    & $AddGrant $role 'Direct'
                 }
 
                 # Indirect membership via Entra ID security group.
-                # Entra ID groups added to SP groups have LoginName like "c:0t.c|tenant|{guid}".
-                # Extract the trailing GUID and check against the user's transitive group map.
+                # Entra groups nested in SP groups have LoginName like "c:0t.c|tenant|{guid}".
+                # Extract the trailing GUID and look it up in the user's transitive group map.
                 if ($UserGroupMap -and $UserGroupMap.Count -gt 0) {
                     foreach ($member in $members) {
                         if ($member.LoginName -match '\|([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})$') {
                             $groupId = $Matches[1]
                             if ($UserGroupMap.ContainsKey($groupId)) {
-                                return [PSCustomObject]@{
-                                    SiteName = $SiteTitle
-                                    SiteUrl  = $SiteUrl
-                                    Role     = $role
-                                    ViaGroup = $UserGroupMap[$groupId]
-                                }
+                                & $AddGrant $role "via $($UserGroupMap[$groupId])"
                             }
                         }
                     }
                 }
+            }
+
+            if ($grantList.Count -eq 0) { return $null }
+
+            # Resolve highest role
+            $topRole = ($grantList |
+                Sort-Object { $priority[$_.Role] } -Descending |
+                Select-Object -First 1).Role
+
+            # Highest removable direct role (non-Admin Direct grant)
+            $directGrants = @($grantList |
+                Where-Object { $_.Source -eq 'Direct' -and $_.Role -ne 'Admin' } |
+                Sort-Object { $priority[$_.Role] } -Descending)
+            $directRole = if ($directGrants.Count -gt 0) { $directGrants[0].Role } else { $null }
+
+            # Unique source names for the Access column, sorted
+            $allSources      = @($grantList | ForEach-Object { $_.Source } | Select-Object -Unique | Sort-Object)
+            $remainingSources = @($allSources | Where-Object { $_ -ne 'Direct' })
+
+            return [PSCustomObject]@{
+                SiteName         = $SiteTitle
+                SiteUrl          = $SiteUrl
+                Role             = $topRole
+                DirectRole       = $directRole
+                Sources          = ($allSources -join ' + ')
+                RemainingSources = ($remainingSources -join ' + ')
+                HasMultiple      = ($grantList.Count -gt 1)
+                CanRemove        = ($null -ne $directRole)
             }
         } catch { }
         return $null
@@ -801,10 +842,12 @@ function Show-MainForm {
     $dgv.AutoSizeColumnsMode   = 'Fill'
     [void]$dgv.Columns.Add('Site', 'Site')
     [void]$dgv.Columns.Add('Role', 'Role')
+    [void]$dgv.Columns.Add('Access', 'Access')
     [void]$dgv.Columns.Add('URL', 'URL')
-    $dgv.Columns['Site'].FillWeight = 40
-    $dgv.Columns['Role'].FillWeight = 15
-    $dgv.Columns['URL'].FillWeight  = 45
+    $dgv.Columns['Site'].FillWeight   = 33
+    $dgv.Columns['Role'].FillWeight   = 12
+    $dgv.Columns['Access'].FillWeight = 23
+    $dgv.Columns['URL'].FillWeight    = 32
 
     $btnAdd               = New-Object System.Windows.Forms.Button
     $btnAdd.Text          = "Add to Site..."
@@ -868,8 +911,16 @@ function Show-MainForm {
     $RefreshGrid = {
         $dgv.Rows.Clear()
         foreach ($m in $script:Memberships) {
-            $displayRole = if ($m.ViaGroup) { "$($m.Role) (via $($m.ViaGroup))" } else { $m.Role }
-            [void]$dgv.Rows.Add($m.SiteName, $displayRole, $m.SiteUrl)
+            [void]$dgv.Rows.Add($m.SiteName, $m.Role, $m.Sources, $m.SiteUrl)
+        }
+        # Row tinting: amber for Site Admin rows, blue for rows with multiple overlapping grants
+        for ($i = 0; $i -lt $dgv.Rows.Count; $i++) {
+            $m = $script:Memberships[$i]
+            if ($m.Role -eq 'Admin') {
+                $dgv.Rows[$i].DefaultCellStyle.BackColor = [System.Drawing.Color]::FromArgb(255, 236, 179)
+            } elseif ($m.HasMultiple) {
+                $dgv.Rows[$i].DefaultCellStyle.BackColor = [System.Drawing.Color]::FromArgb(219, 234, 254)
+            }
         }
     }
 
@@ -942,15 +993,17 @@ function Show-MainForm {
             & $SetStatus "Scanning site access for $($script:SelectedUser.DisplayName)..."
             $script:Memberships = @(Get-UserSiteMemberships -UserEmail $script:SelectedUser.Email -AllSites $script:AllSites -LogBox $rtbLog -UserGroupMap $groupMap)
             & $RefreshGrid
-            $count        = $script:Memberships.Count
-            $directCount  = @($script:Memberships | Where-Object { -not $_.ViaGroup }).Count
-            $groupCount   = @($script:Memberships | Where-Object { $_.ViaGroup }).Count
+            $count       = $script:Memberships.Count
+            $adminCount  = @($script:Memberships | Where-Object { $_.Role -eq 'Admin' }).Count
+            $mixedCount  = @($script:Memberships | Where-Object { $_.HasMultiple }).Count
             if ($count -eq 0) {
                 & $SetStatus "$($script:SelectedUser.DisplayName) has no site access."
-            } elseif ($groupCount -gt 0) {
-                & $SetStatus "$($script:SelectedUser.DisplayName) has access to $count site(s) — $directCount direct, $groupCount via group."
             } else {
-                & $SetStatus "$($script:SelectedUser.DisplayName) is a member of $count site(s)."
+                $extras = @()
+                if ($adminCount -gt 0) { $extras += "$adminCount as site admin" }
+                if ($mixedCount -gt 0) { $extras += "$mixedCount with layered access" }
+                $suffix = if ($extras.Count -gt 0) { " — $($extras -join ', ')" } else { '' }
+                & $SetStatus "$($script:SelectedUser.DisplayName) has access to $count site(s)$suffix."
             }
             $btnAdd.Enabled          = $true
             $btnRefreshSites.Enabled = $true
@@ -960,11 +1013,12 @@ function Show-MainForm {
         }
     })
 
-    # Grid selection enables remove button — disabled for via-group rows (can't remove group-inherited access)
+    # Grid selection enables remove button only when there is a removable direct grant.
+    # Admin-only rows and group-only rows are read-only; CanRemove encodes the right condition.
     $dgv.Add_SelectionChanged({
         if ($script:SelectedUser -and $dgv.SelectedRows.Count -gt 0) {
             $idx = $dgv.SelectedRows[0].Index
-            $btnRemove.Enabled = ($idx -ge 0 -and $idx -lt $script:Memberships.Count -and -not $script:Memberships[$idx].ViaGroup)
+            $btnRemove.Enabled = ($idx -ge 0 -and $idx -lt $script:Memberships.Count -and $script:Memberships[$idx].CanRemove)
         } else {
             $btnRemove.Enabled = $false
         }
@@ -1019,17 +1073,23 @@ function Show-MainForm {
     # Remove from site
     $btnRemove.Add_Click({
         if (-not $script:SelectedUser -or $dgv.SelectedRows.Count -eq 0) { return }
-        $idx  = $dgv.SelectedRows[0].Index
-        $mem  = $script:Memberships[$idx]
+        $idx = $dgv.SelectedRows[0].Index
+        $mem = $script:Memberships[$idx]
+
+        # Build confirmation message; warn when other grants will survive the removal
+        $remainingNote = ''
+        if ($mem.RemainingSources) {
+            $remainingNote = "`n`nNote: $($script:SelectedUser.DisplayName) will still have access via $($mem.RemainingSources)."
+        }
         $conf = [System.Windows.Forms.MessageBox]::Show(
-            "Remove $($script:SelectedUser.DisplayName) from $($mem.SiteName)?",
+            "Remove $($script:SelectedUser.DisplayName)'s direct $($mem.DirectRole) access from $($mem.SiteName)?$remainingNote",
             "Confirm", 'YesNo', 'Warning')
         if ($conf -ne 'Yes') { return }
 
         & $SetStatus "Removing $($script:SelectedUser.DisplayName) from $($mem.SiteName)..."
         $removeError = $null
         try {
-            Remove-UserFromSite -SiteUrl $mem.SiteUrl -UserEmail $script:SelectedUser.Email -Role $mem.Role
+            Remove-UserFromSite -SiteUrl $mem.SiteUrl -UserEmail $script:SelectedUser.Email -Role $mem.DirectRole
         } catch {
             $removeError = $_
         }
@@ -1039,7 +1099,7 @@ function Show-MainForm {
         } else {
             & $SetStatus "Removed $($script:SelectedUser.DisplayName) from $($mem.SiteName). Use Refresh to verify."
             Show-CountdownDialog `
-                -Message "$($script:SelectedUser.DisplayName) was removed from $($mem.SiteName).`n`nSharePoint needs a moment to propagate the change. Wait for the countdown before refreshing." `
+                -Message "$($script:SelectedUser.DisplayName)'s direct $($mem.DirectRole) access was removed from $($mem.SiteName).`n`nSharePoint needs a moment to propagate the change. Wait for the countdown before refreshing." `
                 -Title 'Success'
         }
     })
@@ -1057,14 +1117,14 @@ function Show-MainForm {
             $groupMap = Get-UserTransitiveGroupMap -UserUpn $script:SelectedUser.Account
             $script:Memberships = @(Get-UserSiteMemberships -UserEmail $script:SelectedUser.Email -AllSites $script:AllSites -LogBox $rtbLog -UserGroupMap $groupMap)
             & $RefreshGrid
-            $count       = $script:Memberships.Count
-            $directCount = @($script:Memberships | Where-Object { -not $_.ViaGroup }).Count
-            $groupCount  = @($script:Memberships | Where-Object { $_.ViaGroup }).Count
-            if ($groupCount -gt 0) {
-                & $SetStatus "$($script:SelectedUser.DisplayName) has access to $count site(s) — $directCount direct, $groupCount via group."
-            } else {
-                & $SetStatus "$($script:SelectedUser.DisplayName) is a member of $count site(s)."
-            }
+            $count      = $script:Memberships.Count
+            $adminCount = @($script:Memberships | Where-Object { $_.Role -eq 'Admin' }).Count
+            $mixedCount = @($script:Memberships | Where-Object { $_.HasMultiple }).Count
+            $extras = @()
+            if ($adminCount -gt 0) { $extras += "$adminCount as site admin" }
+            if ($mixedCount -gt 0) { $extras += "$mixedCount with layered access" }
+            $suffix = if ($extras.Count -gt 0) { " — $($extras -join ', ')" } else { '' }
+            & $SetStatus "$($script:SelectedUser.DisplayName) has access to $count site(s)$suffix."
         } catch {
             & $SetStatus "Refresh failed: $_"
             [System.Windows.Forms.MessageBox]::Show($_.ToString(), "Error", 'OK', 'Error') | Out-Null

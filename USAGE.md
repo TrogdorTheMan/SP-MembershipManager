@@ -22,11 +22,18 @@ The success dialog that appears after an add or remove includes a short countdow
 
 **In short:** if the count looks wrong after a change, wait a few seconds and refresh again. If it continues beyond 2 or 3 refreshes, contact your help desk or whomever provided the tool to you.
 
-### Access via security groups shows as "Role (via GroupName)"
+### The Access column shows where access comes from
 
-If a user has SharePoint access because they belong to an Entra ID security group (e.g. "SharePoint Power Users"), the tool detects this and shows it in the Role column as "Member (via SharePoint Power Users)" or similar.
+The grid includes an **Access** column that shows how a user's access was granted. Common values:
 
-This access is read-only in the tool — you cannot remove someone from a site if their access comes from a group. To remove that access, the group membership itself needs to change.
+- **Direct** — the user was explicitly added to the site's Owners, Members, or Visitors group
+- **via GroupName** — access comes from an Entra ID security group (e.g. "via SharePoint Power Users")
+- **Site Admin** — the user is a site collection administrator, the highest SharePoint role
+- Combinations like **Direct + via Power Users** appear when a user has access from more than one source simultaneously; these rows are highlighted in blue
+
+Rows highlighted in **amber** indicate site collection administrators.
+
+You can only remove access that is directly assigned. If the Access column shows only group or admin sources, the Remove button will be disabled. To remove group-based access, the security group membership itself needs to change.
 
 ### PnP.PowerShell installs on first run
 
