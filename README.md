@@ -10,6 +10,34 @@ A Windows GUI tool that lets authorized users manage SharePoint Online site memb
 - Remove them from a site
 - Logs every action to `C:\temp\SP-MembershipManager\Logs\`
 
+## Architecture
+
+```mermaid
+flowchart LR
+    subgraph exe["SP-MembershipManager.exe (end user machine)"]
+        UI["PowerShell + WinForms UI"]
+        PnP["PnP.PowerShell"]
+        CFG["app-config.json"]
+        CERT["sp-mm.pfx (cert)"]
+    end
+
+    subgraph your["TrogdorTheMan's Azure Tenant"]
+        APP["Entra ID App Registration\nClient ID + Certificate\n(multi-tenant, registered once)"]
+    end
+
+    subgraph client["Client Tenant (contoso)"]
+        SP_svc["Service Principal\n(created by one-time admin consent)"]
+        SPO["SharePoint Online\nSites.FullControl.All"]
+        GRAPH["Microsoft Graph\nUser.ReadBasic.All"]
+    end
+
+    exe -- "cert auth" --> APP
+    APP -. "trust" .-> SP_svc
+    SP_svc --> SPO
+    SP_svc --> GRAPH
+    exe -- "PnP operations" --> client
+```
+
 ## Requirements
 
 - Windows 10/11
