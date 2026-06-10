@@ -14,17 +14,19 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - name: Install PS12EXE
-        shell: pwsh
-        run: Install-Module -Name PS12EXE -Scope CurrentUser -Force
+      - name: Setup .NET
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '8.x'
 
-      - name: Dump PS12EXE parameters
+      - name: Build launcher
         shell: pwsh
-        run: Get-Help ps12exe -Full | Out-String
-
-      - name: Build exe
-        shell: pwsh
-        run: .\build.ps1
+        run: |
+          dotnet publish launcher/Launcher.csproj `
+            -c Release `
+            -r win-x64 `
+            --self-contained true `
+            -o build/output
 
       - name: Upload build artifact
         uses: actions/upload-artifact@v4

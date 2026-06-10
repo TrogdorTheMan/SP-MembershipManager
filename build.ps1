@@ -1,68 +1,40 @@
-#Requires -Version 5.1
+#Requires -Version 7.0
 
 <#
 .SYNOPSIS
-    Packages SP-MembershipManager.ps1 into a standalone Windows executable.
+    Packages SP-MembershipManager into a standalone Windows executable.
 
 .DESCRIPTION
-    Uses ps2exe to compile SP-MembershipManager.ps1 into a .exe that runs
-    without requiring PowerShell to be explicitly invoked. PnP.PowerShell still
-    needs to be installed on the end-user machine.
+    Uses dotnet publish to compile the C# launcher (which embeds SP-MembershipManager.ps1)
+    into a self-contained single-file exe. Requires the .NET 8 SDK.
 
 .NOTES
-    Run this script once from your dev machine to produce a distributable build.
-    Requires ps2exe: Install-Module -Name ps2exe -Scope CurrentUser
+    Install the .NET 8 SDK from https://dotnet.microsoft.com/download
 #>
 
 Set-StrictMode -Version Latest
 $ErrorActionPreference = 'Stop'
 
-$root    = $PSScriptRoot
-$src     = Join-Path $root 'SP-MembershipManager.ps1'
-$outDir  = Join-Path $root 'build\output'
-$outExe  = Join-Path $outDir 'SP-MembershipManager.exe'
-$iconFile = Join-Path $root 'assets\icon.ico'
+$root   = $PSScriptRoot
+$outDir = Join-Path $root 'build\output'
+$outExe = Join-Path $outDir 'SP-MembershipManager.exe'
+$proj   = Join-Path $root 'launcher\Launcher.csproj'
 
-# Prefer PS12EXE (PS7-capable fork) over ps2exe
-if (Get-Module -ListAvailable -Name PS12EXE) {
-    Import-Module PS12EXE
-} elseif (Get-Module -ListAvailable -Name ps2exe) {
-    Import-Module ps2exe
-} else {
-    Write-Host "Installing PS12EXE..." -ForegroundColor Yellow
-    Install-Module -Name PS12EXE -Scope CurrentUser -Force
-    Import-Module PS12EXE
-}
-
-# Create output directory
-if (-not (Test-Path $outDir)) {
-    New-Item -ItemType Directory -Path $outDir | Out-Null
+if (-not (Get-Command dotnet -ErrorAction SilentlyContinue)) {
+    throw 'dotnet not found. Install the .NET 8 SDK from https://dotnet.microsoft.com/download'
 }
 
 Write-Host "Building $outExe..." -ForegroundColor Cyan
 
-$params = @{
-    inputFile  = $src
-    outputFile = $outExe
-    noConsole  = $true
-    x64        = $true
-    verbose    = $true
-}
-
-# Include icon if it exists
-if (Test-Path $iconFile) {
-    $params['iconFile'] = $iconFile
-}
-
-if (Get-Module PS12EXE) {
-    ps12exe @params
-} else {
-    Invoke-ps2exe @params
-}
+dotnet publish $proj `
+    -c Release `
+    -r win-x64 `
+    --self-contained true `
+    -o $outDir
 
 if (Test-Path $outExe) {
-    $size = [math]::Round((Get-Item $outExe).Length / 1KB, 1)
-    Write-Host "Build complete: $outExe ($size KB)" -ForegroundColor Green
+    $size = [math]::Round((Get-Item $outExe).Length / 1MB, 1)
+    Write-Host "Build complete: $outExe ($size MB)" -ForegroundColor Green
 } else {
-    Write-Error "Build failed - output file not found."
+    throw 'Build failed - output file not found.'
 }
