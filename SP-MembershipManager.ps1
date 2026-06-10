@@ -132,8 +132,23 @@ function Connect-Tenant {
 }
 
 function Get-AllSites {
-    $sites = Get-PnPTenantSite -IncludeOneDriveSites:$false | Where-Object { $_.Template -notlike '*REDIRECT*' }
-    return $sites | Select-Object Title, Url
+    $sites = [System.Collections.Generic.List[PSCustomObject]]::new()
+    $url = "sites?`$select=displayName,webUrl&`$top=200"
+    do {
+        $response = Invoke-PnPGraphMethod -Url $url -Method Get
+        foreach ($s in $response.value) {
+            # Skip OneDrive personal sites and root tenant site
+            if ($s.webUrl -notlike "*/personal/*" -and $s.webUrl -match "/sites/") {
+                $sites.Add([PSCustomObject]@{
+                    Title = $s.displayName
+                    Url   = $s.webUrl
+                })
+            }
+        }
+        $nextLink = $response.PSObject.Properties.Item('@odata.nextLink')
+        $url = if ($nextLink) { $nextLink.Value } else { $null }
+    } while ($url)
+    return $sites
 }
 
 function Search-Users {
