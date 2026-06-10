@@ -62,12 +62,13 @@ $script:TenantName   = ""
 $script:CertPath     = ""
 $script:CertPassword = $null
 
-$script:ConfigFile = Join-Path $PSScriptRoot "app-config.json"
+$script:ConfigFile   = Join-Path $PSScriptRoot "app-config.json"
+$script:LastUrlFile  = Join-Path $PSScriptRoot "last-url.txt"
 
 function Load-AppConfig {
     if (-not (Test-Path $script:ConfigFile)) {
         [System.Windows.Forms.MessageBox]::Show(
-            "app-config.json not found next to the script.`n`nCreate it with the following content:`n`n{ `"CertificatePath`": `".\sp-mm.pfx`", `"CertificatePassword`": `"YOUR_CERT_PASSWORD`" }",
+            "app-config.json not found next to the script.`n`nSee app-config.example.json for the required format.",
             "Configuration Missing", 'OK', 'Error') | Out-Null
         exit
     }
@@ -78,8 +79,13 @@ function Load-AppConfig {
             "Configuration Error", 'OK', 'Error') | Out-Null
         exit
     }
+    if (-not $cfg.Tenant) {
+        [System.Windows.Forms.MessageBox]::Show(
+            "app-config.json is missing Tenant (e.g. `"contoso.onmicrosoft.com`").",
+            "Configuration Error", 'OK', 'Error') | Out-Null
+        exit
+    }
     $certPath = $cfg.CertificatePath
-    # Resolve relative paths from the script's directory
     if (-not [System.IO.Path]::IsPathRooted($certPath)) {
         $certPath = Join-Path $PSScriptRoot $certPath
     }
@@ -91,18 +97,24 @@ function Load-AppConfig {
     }
     $script:CertPath     = $certPath
     $script:CertPassword = ConvertTo-SecureString $cfg.CertificatePassword -AsPlainText -Force
+    $script:TenantName   = $cfg.Tenant
+}
+
+function Get-LastUrl {
+    if (Test-Path $script:LastUrlFile) {
+        return (Get-Content $script:LastUrlFile -Raw).Trim()
+    }
+    return ""
+}
+
+function Save-LastUrl {
+    param([string]$Url)
+    try { Set-Content $script:LastUrlFile $Url } catch { }
 }
 
 # ---------------------------------------------------------------------------
 # SharePoint operations
 # ---------------------------------------------------------------------------
-
-function Get-TenantName {
-    param([string]$AdminUrl)
-    # Extracts "contoso" from "https://contoso-admin.sharepoint.com"
-    $host = ([System.Uri]$AdminUrl).Host
-    return $host.Split('.')[0] -replace '-admin$', ''
-}
 
 function Connect-Site {
     param([string]$Url)
@@ -110,13 +122,12 @@ function Connect-Site {
         -ClientId $script:AppClientId `
         -CertificatePath $script:CertPath `
         -CertificatePassword $script:CertPassword `
-        -Tenant "$($script:TenantName).onmicrosoft.com" `
+        -Tenant $script:TenantName `
         -WarningAction SilentlyContinue
 }
 
 function Connect-Tenant {
     param([string]$AdminUrl)
-    $script:TenantName = Get-TenantName -AdminUrl $AdminUrl
     Connect-Site -Url $AdminUrl
 }
 
@@ -225,6 +236,7 @@ function Show-AdminUrlDialog {
     $txt.Location        = New-Object System.Drawing.Point(12, 36)
     $txt.Size            = New-Object System.Drawing.Size(398, 23)
     $txt.PlaceholderText = "https://yourtenant-admin.sharepoint.com"
+    $txt.Text            = Get-LastUrl
 
     $btnOk = New-Object System.Windows.Forms.Button
     $btnOk.Text         = "Connect"
@@ -243,7 +255,9 @@ function Show-AdminUrlDialog {
     $dlg.Controls.AddRange(@($lbl, $txt, $btnOk, $btnCx))
 
     if ($dlg.ShowDialog() -eq 'OK') {
-        return $txt.Text.Trim()
+        $url = $txt.Text.Trim()
+        Save-LastUrl $url
+        return $url
     }
     return $null
 }

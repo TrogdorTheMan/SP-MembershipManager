@@ -1,3 +1,5 @@
 {
-  "ClientSecret": "YOUR_CLIENT_SECRET_HERE"
+  "CertificatePath": ".\\sp-mm.pfx",
+  "CertificatePassword": "YOUR_CERT_PASSWORD_HERE",
+  "Tenant": "yourtenant.onmicrosoft.com"
 }
