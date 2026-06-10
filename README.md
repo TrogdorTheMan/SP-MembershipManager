@@ -74,6 +74,10 @@ Then replace `$script:AppClientId` near the top of `SP-MembershipManager.ps1` wi
 - **Per-client build config** — bake a locked admin URL, critical site list, and feature flags into each compiled exe at build time so a client's exe can't be pointed at the wrong tenant
 - **User auth gate** — MSAL interactive login on launch with M365 security group membership check, preventing unauthorized use if the exe reaches the wrong hands; group ID baked in per-client at build time
 
+## Code Signing
+
+Releases are signed using the [SignPath Foundation](https://signpath.org) free code signing program for open source projects.
+
 ## License
 
 MIT. See [LICENSE](LICENSE).
