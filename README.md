@@ -76,7 +76,11 @@ Then replace `$script:AppClientId` near the top of `SP-MembershipManager.ps1` wi
 
 ## Code Signing
 
-Releases are signed using the [SignPath Foundation](https://signpath.org) free code signing program for open source projects.
+An application for free code signing through the [SignPath Foundation](https://signpath.org) open source program was submitted on 2026-06-09 and is pending review. Once approved, releases will be signed.
+
+Until signing is in place, Windows Defender may flag the executable as a false positive. This is a known issue with PowerShell-compiled executables. To work around it, add a Defender exclusion for the exe after downloading:
+
+**Windows Security → Virus & threat protection → Manage settings → Add or remove exclusions → Add file → select SP-MembershipManager.exe**
 
 ## License
 
