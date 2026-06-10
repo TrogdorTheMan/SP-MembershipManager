@@ -9,3 +9,6 @@ logs/
 
 # VS Code
 .vscode/
+
+# Local config (contains client secret - never commit)
+app-config.json
