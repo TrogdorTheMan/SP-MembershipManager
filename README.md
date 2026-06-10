@@ -77,6 +77,10 @@ If you fork this repo, you can substitute your own multi-tenant Entra ID app reg
 
 Then replace `$script:AppClientId` near the top of `SP-MembershipManager.ps1` with your own Client ID, generate a certificate for your app registration, and update `app-config.json` with the cert path and your tenant name.
 
+## Usage
+
+See [USAGE.md](USAGE.md) for day-to-day usage instructions and known behaviors.
+
 ## Roadmap
 
 - **Group membership expansion** — users who have access via an Entra ID security group (e.g. "SharePoint Power Users") are not currently detected; this will resolve group membership transitively and show "Member (via GroupName)" in the site access grid
