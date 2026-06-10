@@ -87,8 +87,14 @@ $script:CertPath          = ""
 $script:CertPassword      = $null
 $script:CertPasswordPlain = ""
 
-# $PSScriptRoot is empty when running as a ps2exe-compiled exe; fall back to the exe's directory.
-$script:ScriptRoot = if ($PSScriptRoot) { $PSScriptRoot } else {
+# When running via the C# launcher, SP_MM_APP_DIR is set to the exe's directory.
+# When running directly as a .ps1, use $PSScriptRoot.
+# Fall back to the process base directory for other compiled scenarios.
+$script:ScriptRoot = if ($env:SP_MM_APP_DIR) {
+    $env:SP_MM_APP_DIR
+} elseif ($PSScriptRoot) {
+    $PSScriptRoot
+} else {
     [System.AppDomain]::CurrentDomain.BaseDirectory.TrimEnd('\')
 }
 
