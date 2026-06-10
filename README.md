@@ -30,6 +30,8 @@ Site membership lookups run in parallel (up to 8 concurrent connections) using P
 
 ## Running from source
 
+Before running, make sure `app-config.json` and `sp-mm.pfx` are in the same directory as the script. Copy `app-config.example.json` to `app-config.json` and fill in your tenant details.
+
 ```powershell
 .\SP-MembershipManager.ps1
 ```
@@ -46,9 +48,15 @@ To build locally, install the [.NET 8 SDK](https://dotnet.microsoft.com/download
 .\build.ps1
 ```
 
-The compiled executable is written to `build\output\SP-MembershipManager.exe`. End users still need PnP.PowerShell installed.
+The compiled executable is written to `build\output\SP-MembershipManager.exe`. PnP.PowerShell is installed automatically on first run if not already present.
 
 ## Deploying to a new tenant
+
+Place the following three files in the same folder:
+
+- `SP-MembershipManager.exe` — download from the [Actions tab](https://github.com/TrogdorTheMan/SP-MembershipManager/actions) or a [release](https://github.com/TrogdorTheMan/SP-MembershipManager/releases)
+- `app-config.json` — copy from `app-config.example.json` and fill in your tenant details; the `CertificatePath` field should be the filename of your pfx (e.g. `sp-mm.pfx`)
+- `sp-mm.pfx` — the certificate for your Entra ID app registration (filename must match `CertificatePath` in `app-config.json`)
 
 Before first use, a Global Admin in the target tenant needs to grant consent for the app. This is a one-time step per tenant.
 
