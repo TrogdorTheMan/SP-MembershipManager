@@ -74,7 +74,7 @@
   <line x1="442" y1="240" x2="470" y2="240" stroke="#6b7280" stroke-width="1.5" marker-end="url(#ad)"/>
 
   <!-- One-time setup → Graph -->
-  <line x1="442" y1="320" x2="470" y2="331" stroke="#d97706" stroke-width="1.5" marker-end="url(#ao)"/>
+  <line x1="442" y1="320" x2="470" y2="320" stroke="#d97706" stroke-width="1.5" marker-end="url(#ao)"/>
 
   <!-- exe → Client Tenant (PnP operations, dashed) -->
   <path d="M 125 254 Q 125 390 260 340" fill="none" stroke="#6b7280" stroke-width="1.5" stroke-dasharray="5,3" marker-end="url(#ad)"/>
