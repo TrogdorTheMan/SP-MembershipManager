@@ -404,25 +404,37 @@ function Get-UserSiteMemberships {
         [hashtable]$UserGroupMap = @{}
     )
 
-    $line = Write-Log "Checking $($AllSites.Count) sites in parallel (up to 8 at once)..."
+    $line = Write-Log "Checking $($AllSites.Count) sites in parallel (up to 4 at once)..."
     if ($LogBox) {
         $LogBox.Invoke([Action]{ $LogBox.AppendText("$line`n"); $LogBox.ScrollToCaret() })
     }
 
     $scriptBlock = {
         param($SiteTitle, $SiteUrl, $UserEmail, $ClientId, $CertPath, $CertPasswordPlain, $Tenant, $UserGroupMap)
+        # Each site is scanned with its OWN connection object (-ReturnConnection), and
+        # every PnP call below is bound to it via -Connection. PnP's implicit "current
+        # connection" is a process-global static; with parallel runspaces sharing one
+        # process it gets clobbered between runspaces, corrupting CSOM query state
+        # (NullRef, "key not present in dictionary", "non-concurrent collection
+        # corrupted"). Explicit -Connection isolates each runspace. The whole per-site
+        # scan is retried up to 3x on a fresh connection as insurance against
+        # connect-time races.
+        $maxAttempts = 3
+        for ($attempt = 1; $attempt -le $maxAttempts; $attempt++) {
         # Non-fatal warnings (e.g. the site-admin check threw but the rest of the
         # scan still succeeded). Surfaced on the main thread so partial failures
-        # are visible instead of silently changing the result.
+        # are visible instead of silently changing the result. Reset each attempt.
         $scanWarnings = [System.Collections.Generic.List[string]]::new()
+        $conn = $null
         try {
             Import-Module PnP.PowerShell -ErrorAction Stop -WarningAction SilentlyContinue
             $secPass = ConvertTo-SecureString $CertPasswordPlain -AsPlainText -Force
-            Connect-PnPOnline -Url $SiteUrl `
+            $conn = Connect-PnPOnline -Url $SiteUrl `
                 -ClientId $ClientId `
                 -CertificatePath $CertPath `
                 -CertificatePassword $secPass `
                 -Tenant $Tenant `
+                -ReturnConnection `
                 -WarningAction SilentlyContinue `
                 -ErrorAction Stop
 
@@ -443,7 +455,7 @@ function Get-UserSiteMemberships {
             # Check site collection administrator status (highest SP role, not in standard groups).
             # Checks both direct assignment (by LoginName) and assignment via Entra group.
             try {
-                $admins = Get-PnPSiteCollectionAdmin
+                $admins = Get-PnPSiteCollectionAdmin -Connection $conn
                 if ($admins | Where-Object { $_.Email -ieq $UserEmail -and $_.LoginName -like 'i:*' }) {
                     & $AddGrant 'Admin' 'Site Admin'
                 }
@@ -462,7 +474,7 @@ function Get-UserSiteMemberships {
             }
 
             # Check standard Owners / Members / Visitors groups
-            $groups = Get-PnPGroup
+            $groups = Get-PnPGroup -Connection $conn
             foreach ($group in $groups) {
                 $role = $null
                 if ($group.Title -like '* Owners')       { $role = 'Owner'   }
@@ -470,7 +482,7 @@ function Get-UserSiteMemberships {
                 elseif ($group.Title -like '* Visitors') { $role = 'Visitor' }
                 if (-not $role) { continue }
 
-                $members = Get-PnPGroupMember -Group $group
+                $members = Get-PnPGroupMember -Group $group -Connection $conn
 
                 # Collect all Entra ID group entries in this SP group (LoginName ending with a GUID).
                 $entraGroupsHere = @{}
@@ -494,7 +506,7 @@ function Get-UserSiteMemberships {
                     # entries, making them look directly added when they are not).
                     try {
                         $checkBody   = (@{ groupIds = @($entraGroupsHere.Keys) } | ConvertTo-Json -Compress)
-                        $checkResult = Invoke-PnPGraphMethod -Url "users/$UserEmail/checkMemberGroups" -Method Post -Content $checkBody
+                        $checkResult = Invoke-PnPGraphMethod -Url "users/$UserEmail/checkMemberGroups" -Method Post -Content $checkBody -Connection $conn
                         foreach ($gid in $checkResult.value) {
                             if ($entraGroupsHere.ContainsKey($gid)) {
                                 & $AddGrant $role "via $($entraGroupsHere[$gid])"
@@ -570,21 +582,28 @@ function Get-UserSiteMemberships {
                 ScanWarnings       = $scanWarnings
             }
         } catch {
-            # Fatal: this site failed entirely and would otherwise vanish from the
-            # results, changing the count between runs. Return a marker so the main
-            # thread can log which site dropped and why (429 throttle, token error, etc.)
-            # instead of silently swallowing it.
-            return [PSCustomObject]@{
-                __ScanError = $true
-                SiteName    = $SiteTitle
-                SiteUrl     = $SiteUrl
-                Error       = $_.Exception.Message
+            # This attempt failed. PnP errors under runspace concurrency are usually
+            # transient corruption of shared state, so retry on a fresh connection.
+            # Only give up (and surface a DROPPED marker) after the last attempt.
+            if ($attempt -ge $maxAttempts) {
+                return [PSCustomObject]@{
+                    __ScanError = $true
+                    SiteName    = $SiteTitle
+                    SiteUrl     = $SiteUrl
+                    Error       = "after $attempt attempt(s): $($_.Exception.Message)"
+                }
             }
+            Start-Sleep -Milliseconds (250 * $attempt)
+            continue
+        } finally {
+            # Always release this attempt's connection (success, retry, or give-up).
+            if ($conn) { try { Disconnect-PnPOnline -Connection $conn } catch { } }
+        }
         }
         return $null
     }
 
-    $pool = [System.Management.Automation.Runspaces.RunspaceFactory]::CreateRunspacePool(1, 8)
+    $pool = [System.Management.Automation.Runspaces.RunspaceFactory]::CreateRunspacePool(1, 4)
     $pool.Open()
 
     $jobs = foreach ($site in $AllSites) {
