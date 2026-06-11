@@ -39,6 +39,10 @@ You can only remove access that is directly assigned. If the Access column shows
 
 The tool requires the PnP.PowerShell module. If it is not already installed on the machine, the tool will install it automatically before connecting. This is a one-time step and may take a minute or two the first time.
 
+### Certificate renewal
+
+The tool authenticates using a certificate registered in Entra ID. Certificates expire (typically after 1–2 years). See [CERT-RENEWAL.md](CERT-RENEWAL.md) for step-by-step renewal instructions.
+
 ### Certificate password is encrypted after first run
 
 The first time the tool runs successfully, it encrypts the certificate password in `app-config.json` using Windows DPAPI and replaces the plaintext value with an encrypted blob. This is expected — the plaintext is never stored on disk after that point.
