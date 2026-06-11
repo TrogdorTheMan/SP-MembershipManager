@@ -411,6 +411,10 @@ function Get-UserSiteMemberships {
 
     $scriptBlock = {
         param($SiteTitle, $SiteUrl, $UserEmail, $ClientId, $CertPath, $CertPasswordPlain, $Tenant, $UserGroupMap)
+        # Non-fatal warnings (e.g. the site-admin check threw but the rest of the
+        # scan still succeeded). Surfaced on the main thread so partial failures
+        # are visible instead of silently changing the result.
+        $scanWarnings = [System.Collections.Generic.List[string]]::new()
         try {
             Import-Module PnP.PowerShell -ErrorAction Stop -WarningAction SilentlyContinue
             $secPass = ConvertTo-SecureString $CertPasswordPlain -AsPlainText -Force
@@ -453,7 +457,9 @@ function Get-UserSiteMemberships {
                         }
                     }
                 }
-            } catch { }
+            } catch {
+                $scanWarnings.Add("site-admin check failed: $($_.Exception.Message)")
+            }
 
             # Check standard Owners / Members / Visitors groups
             $groups = Get-PnPGroup
@@ -513,7 +519,19 @@ function Get-UserSiteMemberships {
                 }
             }
 
-            if ($grantList.Count -eq 0) { return $null }
+            if ($grantList.Count -eq 0) {
+                # No access found. If something threw along the way, surface it so a
+                # throttled/failed scan isn't mistaken for "user has no access here."
+                if ($scanWarnings.Count -gt 0) {
+                    return [PSCustomObject]@{
+                        __ScanWarningOnly = $true
+                        SiteName          = $SiteTitle
+                        SiteUrl           = $SiteUrl
+                        ScanWarnings      = $scanWarnings
+                    }
+                }
+                return $null
+            }
 
             # Resolve highest role
             $topRole = ($grantList |
@@ -549,8 +567,20 @@ function Get-UserSiteMemberships {
                 HasMultiple        = ($grantList.Count -gt 1)
                 HasDirectAndGroup  = ($hasDirectGrant -and $viaGroupSources.Count -gt 0)
                 CanRemove          = ($null -ne $directRole)
+                ScanWarnings       = $scanWarnings
             }
-        } catch { }
+        } catch {
+            # Fatal: this site failed entirely and would otherwise vanish from the
+            # results, changing the count between runs. Return a marker so the main
+            # thread can log which site dropped and why (429 throttle, token error, etc.)
+            # instead of silently swallowing it.
+            return [PSCustomObject]@{
+                __ScanError = $true
+                SiteName    = $SiteTitle
+                SiteUrl     = $SiteUrl
+                Error       = $_.Exception.Message
+            }
+        }
         return $null
     }
 
@@ -582,10 +612,31 @@ function Get-UserSiteMemberships {
             try {
                 $result = $job.PS.EndInvoke($job.Handle)
                 foreach ($r in $result) {
-                    if ($r) { $memberships.Add($r) }
+                    if (-not $r) { continue }
+
+                    # A site that failed entirely. Log it loudly — this is the line
+                    # that explains why the count changes between runs.
+                    if ($r.PSObject.Properties.Item('__ScanError')) {
+                        $msg = Write-Log "DROPPED  $($r.SiteUrl)  --  $($r.Error)"
+                        if ($LogBox) { $LogBox.Invoke([Action]{ $LogBox.AppendText("$msg`n"); $LogBox.ScrollToCaret() }) }
+                        continue
+                    }
+
+                    # Surface any non-fatal warnings attached to this site's scan.
+                    if ($r.PSObject.Properties.Item('ScanWarnings')) {
+                        foreach ($w in $r.ScanWarnings) {
+                            $msg = Write-Log "WARN     $($r.SiteUrl)  --  $w"
+                            if ($LogBox) { $LogBox.Invoke([Action]{ $LogBox.AppendText("$msg`n"); $LogBox.ScrollToCaret() }) }
+                        }
+                    }
+
+                    # Warning-only markers carry no membership; don't add them to the grid.
+                    if (-not $r.PSObject.Properties.Item('__ScanWarningOnly')) {
+                        $memberships.Add($r)
+                    }
                 }
             } catch {
-                Write-Log "Warning: runspace error - $_" | Out-Null
+                Write-Log "Warning: runspace EndInvoke error - $_" | Out-Null
             } finally {
                 $job.PS.Dispose()
             }
