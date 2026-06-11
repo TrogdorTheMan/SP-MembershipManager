@@ -984,6 +984,8 @@ function Show-MainForm {
     $script:VerifyTimer       = $null
     $script:VerifyTargetEmail = ''
     $script:SelectedUser = $null
+    $script:ScanRunning  = $false   # true only while a scan is actively executing (re-entrancy guard)
+    $script:UiLocked     = $false   # true while a scan or its pending validation is in flight
 
     # Form
     $form                = New-Object System.Windows.Forms.Form
@@ -1151,29 +1153,54 @@ function Show-MainForm {
         }
     }
 
+    # Helper: lock or unlock the interactive controls. Called with $true while any
+    # scan (search / validate / refresh) is in flight so the user can't fire a
+    # competing operation or change membership mid-scan. The scan loop pumps the
+    # message queue (DoEvents) to animate progress, which is exactly why the controls
+    # stay clickable unless we disable them here.
+    $SetControlsBusy = {
+        param([bool]$Busy)
+        $script:UiLocked = $Busy
+        $en = -not $Busy
+        $lstUsers.Enabled         = $en
+        $txtSearch.Enabled        = $en
+        $btnSearch.Enabled        = $en
+        $btnRefreshSearch.Enabled = $en -and ($script:UserResults.Count -gt 0)
+        $btnAdd.Enabled           = $en -and ($null -ne $script:SelectedUser)
+        $btnRefreshSites.Enabled  = $en -and ($null -ne $script:SelectedUser)
+        if ($Busy) { $btnRemove.Enabled = $false }
+    }
+
     # Helper: run a full scan for the currently selected user and update the grid.
     # Used by both the initial user-select handler and the Refresh button.
     $RunScan = {
         param([string]$StatusPrefix = "Searching")
+        if ($script:ScanRunning) { return }   # guard against a re-entrant scan
         $u = $script:SelectedUser
         if (-not $u) { return }
-        & $SetStatus "$StatusPrefix site access for $($u.DisplayName)..."
-        $gm = Get-UserTransitiveGroupMap -UserUpn $u.Account
-        $script:Memberships = @(Get-UserSiteMemberships -UserEmail $u.Email -AllSites $script:AllSites -LogBox $rtbLog -UserGroupMap $gm)
-        & $RefreshGrid
-        $count      = $script:Memberships.Count
-        $adminCount = @($script:Memberships | Where-Object { $_.Role -eq 'Admin' }).Count
-        $mixedCount = @($script:Memberships | Where-Object { $_.HasMultiple }).Count
-        $btnAdd.Enabled          = $true
-        $btnRefreshSites.Enabled = $true
-        if ($count -eq 0) {
-            & $SetStatus "$($u.DisplayName) has no site access."
-        } else {
-            $extras = @()
-            if ($adminCount -gt 0) { $extras += "$adminCount as site admin" }
-            if ($mixedCount -gt 0) { $extras += "$mixedCount with layered access" }
-            $suffix = if ($extras.Count -gt 0) { " — $($extras -join ', ')" } else { '' }
-            & $SetStatus "$($u.DisplayName) has access to $count site(s)$suffix."
+        $script:ScanRunning = $true
+        & $SetControlsBusy $true
+        try {
+            & $SetStatus "$StatusPrefix site access for $($u.DisplayName)..."
+            $gm = Get-UserTransitiveGroupMap -UserUpn $u.Account
+            $script:Memberships = @(Get-UserSiteMemberships -UserEmail $u.Email -AllSites $script:AllSites -LogBox $rtbLog -UserGroupMap $gm)
+            & $RefreshGrid
+            $count      = $script:Memberships.Count
+            $adminCount = @($script:Memberships | Where-Object { $_.Role -eq 'Admin' }).Count
+            $mixedCount = @($script:Memberships | Where-Object { $_.HasMultiple }).Count
+            if ($count -eq 0) {
+                & $SetStatus "$($u.DisplayName) has no site access."
+            } else {
+                $extras = @()
+                if ($adminCount -gt 0) { $extras += "$adminCount as site admin" }
+                if ($mixedCount -gt 0) { $extras += "$mixedCount with layered access" }
+                $suffix = if ($extras.Count -gt 0) { " — $($extras -join ', ')" } else { '' }
+                & $SetStatus "$($u.DisplayName) has access to $count site(s)$suffix."
+            }
+        } finally {
+            # Always clear the busy state, even if the scan threw, so the UI never sticks.
+            $script:ScanRunning = $false
+            & $SetControlsBusy $false
         }
     }
 
@@ -1211,6 +1238,8 @@ function Show-MainForm {
     $btnSearch.Add_Click({
         $query = $txtSearch.Text.Trim()
         if (-not $query) { return }
+        # Cancel any pending validation pass from a prior selection.
+        if ($script:VerifyTimer) { $script:VerifyTimer.Stop(); $script:VerifyTimer.Dispose(); $script:VerifyTimer = $null }
         & $SetStatus "Searching users..."
         $lstUsers.Items.Clear()
         $dgv.Rows.Clear()
@@ -1249,9 +1278,13 @@ function Show-MainForm {
         $btnRemove.Enabled = $false
         try {
             & $RunScan
-            # Lock the manual Refresh button until the verification pass completes, so the
-            # user can't kick off a competing scan before the initial result is confirmed.
+            # Keep the site-access actions locked through the pending validation pass so the
+            # user can't change membership or kick off a competing scan before it confirms.
+            # The left-hand search panel stays usable so they can switch users if they want.
+            $btnAdd.Enabled          = $false
+            $btnRemove.Enabled       = $false
             $btnRefreshSites.Enabled = $false
+            $script:UiLocked         = $true
             $lblStatus.Text = "$($lblStatus.Text)  (validating...)"
             # Schedule a confirming re-scan shortly after, to catch any SP Online
             # replication lag (e.g. a stale count right after an add/remove).
@@ -1265,8 +1298,8 @@ function Show-MainForm {
                 if ($script:SelectedUser -and $script:SelectedUser.Email -eq $script:VerifyTargetEmail) {
                     try { & $RunScan -StatusPrefix "Validating" } catch { }
                 }
-                # Re-enable manual refresh once the verification pass is done (or skipped).
-                $btnRefreshSites.Enabled = $true
+                # Re-enable the controls once the verification pass is done (or skipped).
+                & $SetControlsBusy $false
             })
             $script:VerifyTimer.Start()
         } catch {
@@ -1278,7 +1311,7 @@ function Show-MainForm {
     # Grid selection enables remove button only when there is a removable direct grant.
     # Admin-only rows and group-only rows are read-only; CanRemove encodes the right condition.
     $dgv.Add_SelectionChanged({
-        if ($script:SelectedUser -and $dgv.SelectedRows.Count -gt 0) {
+        if (-not $script:UiLocked -and $script:SelectedUser -and $dgv.SelectedRows.Count -gt 0) {
             $idx = $dgv.SelectedRows[0].Index
             $btnRemove.Enabled = ($idx -ge 0 -and $idx -lt $script:Memberships.Count -and $script:Memberships[$idx].CanRemove)
         } else {
@@ -1288,7 +1321,7 @@ function Show-MainForm {
 
     # Add to site
     $btnAdd.Add_Click({
-        if (-not $script:SelectedUser) { return }
+        if ($script:UiLocked -or -not $script:SelectedUser) { return }
 
         $dlgForm = New-Object System.Windows.Forms.Form
         $dlgForm.Text = "Add User to Site"
@@ -1335,7 +1368,7 @@ function Show-MainForm {
 
     # Remove from site
     $btnRemove.Add_Click({
-        if (-not $script:SelectedUser -or $dgv.SelectedRows.Count -eq 0) { return }
+        if ($script:UiLocked -or -not $script:SelectedUser -or $dgv.SelectedRows.Count -eq 0) { return }
         $idx = $dgv.SelectedRows[0].Index
         $mem = $script:Memberships[$idx]
 
@@ -1374,7 +1407,7 @@ function Show-MainForm {
 
     # Refresh site access (re-scans for currently selected user)
     $btnRefreshSites.Add_Click({
-        if (-not $script:SelectedUser) { return }
+        if ($script:UiLocked -or -not $script:SelectedUser) { return }
         if ($script:VerifyTimer) { $script:VerifyTimer.Stop(); $script:VerifyTimer.Dispose(); $script:VerifyTimer = $null }
         # Clear the grid so stale rows don't linger while the re-scan runs.
         $dgv.Rows.Clear()
