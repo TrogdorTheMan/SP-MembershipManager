@@ -193,11 +193,13 @@ function Save-LastUrl {
 function Get-ConsentErrorMessage {
     param([string]$ErrorText)
     $consentPatterns = @(
-        'AADSTS65001',          # explicit "user/admin has not consented"
-        'AADSTS700016',         # app not found in tenant (app not consented/registered)
+        'AADSTS65001',          # user/admin has not consented
+        'AADSTS700016',         # app not found in tenant
+        'AADSTS7000229',        # missing service principal in tenant (consent not granted)
         'unauthorized_client',  # app not authorized for this tenant
         'access_denied',        # admin consent required
-        'InvalidClientId'       # client ID not recognized in tenant
+        'InvalidClientId',      # client ID not recognized in tenant
+        'missing service principal' # belt-and-suspenders text match for the above
     )
     $isConsentError = $consentPatterns | Where-Object { $ErrorText -match $_ }
     if (-not $isConsentError) { return $null }
