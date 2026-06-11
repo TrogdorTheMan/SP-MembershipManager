@@ -188,6 +188,30 @@ function Save-LastUrl {
 # SharePoint operations
 # ---------------------------------------------------------------------------
 
+# Returns a friendly consent error message if the error string looks like a
+# missing admin consent failure, or $null if it's an unrelated error.
+function Get-ConsentErrorMessage {
+    param([string]$ErrorText)
+    $consentPatterns = @(
+        'AADSTS65001',          # explicit "user/admin has not consented"
+        'AADSTS700016',         # app not found in tenant (app not consented/registered)
+        'unauthorized_client',  # app not authorized for this tenant
+        'access_denied',        # admin consent required
+        'InvalidClientId'       # client ID not recognized in tenant
+    )
+    $isConsentError = $consentPatterns | Where-Object { $ErrorText -match $_ }
+    if (-not $isConsentError) { return $null }
+
+    $consentUrl = "https://login.microsoftonline.com/common/adminconsent" +
+                  "?client_id=$script:AppClientId" +
+                  "&redirect_uri=https://trogdortheman.github.io/SP-MembershipManager/consent-complete.html"
+
+    return ("Admin consent has not been granted for this tenant.`n`n" +
+            "A Global Administrator needs to visit the following URL and sign in to grant access:`n`n" +
+            "$consentUrl`n`n" +
+            "This is a one-time step per tenant. Once consent is granted, relaunch the tool.")
+}
+
 function Connect-Site {
     param([string]$Url)
     Connect-PnPOnline -Url $Url `
@@ -716,7 +740,8 @@ function Show-LoadingForm {
     if ($syncHash.Error) {
         $loading.Close()
         $loading.Dispose()
-        throw $syncHash.Error
+        $consentMsg = Get-ConsentErrorMessage -ErrorText $syncHash.Error
+        throw $(if ($consentMsg) { $consentMsg } else { $syncHash.Error })
     }
 
     # Re-establish the PnP connection in the main runspace so the main form can use it.
@@ -960,7 +985,7 @@ function Show-MainForm {
         }
     }
 
-    # On load: use pre-loaded sites if available (from loading screen), otherwise connect fresh.
+    # On load: use pre-loaded sites if available    # On load: use pre-loaded sites if available (from loading screen), otherwise connect fresh.
     $form.Add_Load({
         if ($null -ne $PreloadedSites) {
             $script:AllSites      = $PreloadedSites
@@ -977,8 +1002,15 @@ function Show-MainForm {
                 & $SetStatus "Ready. Search for an employee to manage their site access."
                 $btnAdd.Enabled = $false
             } catch {
-                & $SetStatus "Connection failed: $_"
-                [System.Windows.Forms.MessageBox]::Show("Could not connect:`n$_", "Error", 'OK', 'Error') | Out-Null
+                $errText = $_.ToString()
+                $consentMsg = Get-ConsentErrorMessage -ErrorText $errText
+                if ($consentMsg) {
+                    & $SetStatus "Connection failed: admin consent required."
+                    [System.Windows.Forms.MessageBox]::Show($consentMsg, "Admin Consent Required", 'OK', 'Warning') | Out-Null
+                } else {
+                    & $SetStatus "Connection failed: $errText"
+                    [System.Windows.Forms.MessageBox]::Show("Could not connect:`n$errText", "Error", 'OK', 'Error') | Out-Null
+                }
             }
         }
     })
@@ -1190,7 +1222,13 @@ try {
     $sites = Show-LoadingForm -AdminUrl $adminUrl
     Show-MainForm -AdminUrl $adminUrl -PreloadedSites $sites
 } catch {
-    [System.Windows.Forms.MessageBox]::Show(
-        "Could not connect to tenant:`n$_",
-        "Connection Failed", 'OK', 'Error') | Out-Null
+    $errText = $_.ToString()
+    $consentMsg = Get-ConsentErrorMessage -ErrorText $errText
+    if ($consentMsg) {
+        [System.Windows.Forms.MessageBox]::Show($consentMsg, "Admin Consent Required", 'OK', 'Warning') | Out-Null
+    } else {
+        [System.Windows.Forms.MessageBox]::Show(
+            "Could not connect to tenant:`n$errText",
+            "Connection Failed", 'OK', 'Error') | Out-Null
+    }
 }
