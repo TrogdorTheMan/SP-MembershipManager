@@ -344,8 +344,7 @@ function Get-UserSiteMemberships {
             # Checks both direct assignment (by LoginName) and assignment via Entra group.
             try {
                 $admins = Get-PnPSiteCollectionAdmin
-                $directAdminLogin = "i:0#.f|membership|$UserEmail"
-                if ($admins | Where-Object { $_.LoginName -ieq $directAdminLogin }) {
+                if ($admins | Where-Object { $_.Email -ieq $UserEmail -and $_.LoginName -like 'i:*' }) {
                     & $AddGrant 'Admin' 'Site Admin'
                 }
                 if ($UserGroupMap -and $UserGroupMap.Count -gt 0) {
@@ -371,11 +370,12 @@ function Get-UserSiteMemberships {
 
                 $members = Get-PnPGroupMember -Group $group
 
-                # Direct user membership — match on exact claims LoginName, not email,
-                # to avoid false positives when SharePoint materializes Entra group members
-                # into the SP group's user list (e.g. user in "Power Users" which is in Owners).
-                $directLoginName = "i:0#.f|membership|$UserEmail"
-                if ($members | Where-Object { $_.LoginName -ieq $directLoginName }) {
+                # Direct user membership: email match + user-type LoginName (starts with 'i:').
+                # The 'i:' prefix is the SharePoint claims format for individual users;
+                # all group entries (Entra groups, SP groups) use 'c:' prefix and are excluded.
+                # Using email rather than constructing the full LoginName avoids mismatches
+                # when the Graph-returned email and the SP LoginName use different domain aliases.
+                if ($members | Where-Object { $_.Email -ieq $UserEmail -and $_.LoginName -like 'i:*' }) {
                     & $AddGrant $role 'Direct'
                 }
 
