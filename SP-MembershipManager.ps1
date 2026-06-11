@@ -908,10 +908,11 @@ function Show-MainForm {
     Add-Type -AssemblyName System.Windows.Forms
     Add-Type -AssemblyName System.Drawing
 
-    $script:AllSites     = @()
-    $script:UserResults  = @()
-    $script:Memberships  = @()
-    $script:VerifyTimer  = $null
+    $script:AllSites          = @()
+    $script:UserResults       = @()
+    $script:Memberships       = @()
+    $script:VerifyTimer       = $null
+    $script:VerifyTargetEmail = ''
     $script:SelectedUser = $null
 
     # Form
@@ -1180,14 +1181,14 @@ function Show-MainForm {
             & $RunScan
             # Schedule a second scan ~5 s later to catch SP Online replication lag.
             # SP can take a few seconds to return a consistent view after changes.
-            $verifyEmail = $script:SelectedUser.Email
+            $script:VerifyTargetEmail = $script:SelectedUser.Email
             $script:VerifyTimer = New-Object System.Windows.Forms.Timer
             $script:VerifyTimer.Interval = 5000
             $script:VerifyTimer.Add_Tick({
                 $script:VerifyTimer.Stop()
                 $script:VerifyTimer.Dispose()
                 $script:VerifyTimer = $null
-                if ($script:SelectedUser -and $script:SelectedUser.Email -eq $verifyEmail) {
+                if ($script:SelectedUser -and $script:SelectedUser.Email -eq $script:VerifyTargetEmail) {
                     try { & $RunScan -StatusPrefix "Verifying" } catch { }
                 }
             })
