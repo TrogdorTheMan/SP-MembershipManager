@@ -193,44 +193,60 @@ function Show-ConsentDialog {
     Add-Type -AssemblyName System.Windows.Forms
     Add-Type -AssemblyName System.Drawing
 
+    $margin  = 16
+    $iconW   = 32
+    $gap     = 12
+    $textX   = $margin + $iconW + $gap
+    $contentW = 400   # width available for text
+
     $dlg = New-Object System.Windows.Forms.Form
     $dlg.Text            = "Admin Consent Required"
-    $dlg.Size            = New-Object System.Drawing.Size(480, 260)
     $dlg.FormBorderStyle = 'FixedDialog'
     $dlg.StartPosition   = 'CenterScreen'
     $dlg.MaximizeBox     = $false
     $dlg.MinimizeBox     = $false
+    $dlg.AutoSize        = $true
+    $dlg.AutoSizeMode    = 'GrowAndShrink'
+    $dlg.Padding         = New-Object System.Windows.Forms.Padding($margin)
 
     $icon = New-Object System.Windows.Forms.PictureBox
-    $icon.Location  = New-Object System.Drawing.Point(16, 16)
-    $icon.Size      = New-Object System.Drawing.Size(32, 32)
+    $icon.Location  = New-Object System.Drawing.Point($margin, $margin)
+    $icon.Size      = New-Object System.Drawing.Size($iconW, $iconW)
     $icon.Image     = [System.Drawing.SystemIcons]::Warning.ToBitmap()
     $icon.SizeMode  = 'StretchImage'
 
+    $font = New-Object System.Drawing.Font('Segoe UI', 9)
+
     $lblMsg = New-Object System.Windows.Forms.Label
     $lblMsg.Text      = "Admin consent has not been granted for this tenant.`n`nA Global Administrator needs to visit the link below and sign in to grant access. This is a one-time step. Once consent is granted, relaunch the tool."
-    $lblMsg.Location  = New-Object System.Drawing.Point(60, 16)
-    $lblMsg.Size      = New-Object System.Drawing.Size(395, 90)
-    $lblMsg.Font      = New-Object System.Drawing.Font('Segoe UI', 9)
+    $lblMsg.Location  = New-Object System.Drawing.Point($textX, $margin)
+    $lblMsg.MaximumSize = New-Object System.Drawing.Size($contentW, 0)
+    $lblMsg.AutoSize  = $true
+    $lblMsg.Font      = $font
 
     $link = New-Object System.Windows.Forms.LinkLabel
-    $link.Text      = $ConsentUrl
-    $link.Location  = New-Object System.Drawing.Point(60, 112)
-    $link.Size      = New-Object System.Drawing.Size(395, 60)
-    $link.Font      = New-Object System.Drawing.Font('Segoe UI', 9)
-    $link.AutoSize  = $false
-    $link.Add_LinkClicked({
-        Start-Process $ConsentUrl
-    })
+    $link.Text        = $ConsentUrl
+    $link.Location    = New-Object System.Drawing.Point($textX, ($margin + $lblMsg.PreferredHeight + $gap))
+    $link.MaximumSize = New-Object System.Drawing.Size($contentW, 0)
+    $link.AutoSize    = $true
+    $link.Font        = $font
+    $link.Add_LinkClicked({ Start-Process $ConsentUrl })
 
     $btnOk = New-Object System.Windows.Forms.Button
     $btnOk.Text         = "OK"
-    $btnOk.Location     = New-Object System.Drawing.Point(375, 188)
     $btnOk.Size         = New-Object System.Drawing.Size(75, 28)
     $btnOk.DialogResult = 'OK'
     $dlg.AcceptButton   = $btnOk
 
     $dlg.Controls.AddRange(@($icon, $lblMsg, $link, $btnOk))
+
+    # Position OK after controls are added so we know the link's final height
+    $dlg.Add_Shown({
+        $btnY = $link.Bottom + $gap
+        $btnOk.Location = New-Object System.Drawing.Point(($textX + $contentW - $btnOk.Width), $btnY)
+        $dlg.ClientSize = New-Object System.Drawing.Size(($textX + $contentW + $margin), ($btnY + $btnOk.Height + $margin))
+    })
+
     [void]$dlg.ShowDialog()
 }
 
