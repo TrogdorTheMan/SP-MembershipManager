@@ -407,19 +407,27 @@ function Get-UserSiteMemberships {
                 Sort-Object { $priority[$_.Role] } -Descending)
             $directRole = if ($directGrants.Count -gt 0) { $directGrants[0].Role } else { $null }
 
-            # Unique source names for the Access column, sorted
-            $allSources      = @($grantList | ForEach-Object { $_.Source } | Select-Object -Unique | Sort-Object)
+            # Unique source names, sorted
+            $allSources    = @($grantList | ForEach-Object { $_.Source } | Select-Object -Unique | Sort-Object)
+            $viaGroupSources = @($allSources | Where-Object { $_ -like 'via *' })
+            $hasDirectGrant  = [bool]($grantList | Where-Object { $_.Source -eq 'Direct' })
+
+            # Suppress "Direct" from the Access display when group sources already explain access.
+            # SP materializes nested group members as i:0#.f| entries, making them look direct.
+            # The Direct? column surfaces the indicator separately so Remove logic is unaffected.
+            $displaySources  = if ($viaGroupSources.Count -gt 0) { $viaGroupSources } else { $allSources }
             $remainingSources = @($allSources | Where-Object { $_ -ne 'Direct' })
 
             return [PSCustomObject]@{
-                SiteName         = $SiteTitle
-                SiteUrl          = $SiteUrl
-                Role             = $topRole
-                DirectRole       = $directRole
-                Sources          = ($allSources -join ' + ')
-                RemainingSources = ($remainingSources -join ' + ')
-                HasMultiple      = ($grantList.Count -gt 1)
-                CanRemove        = ($null -ne $directRole)
+                SiteName           = $SiteTitle
+                SiteUrl            = $SiteUrl
+                Role               = $topRole
+                DirectRole         = $directRole
+                Sources            = ($displaySources -join ' + ')
+                RemainingSources   = ($remainingSources -join ' + ')
+                HasMultiple        = ($grantList.Count -gt 1)
+                HasDirectAndGroup  = ($hasDirectGrant -and $viaGroupSources.Count -gt 0)
+                CanRemove          = ($null -ne $directRole)
             }
         } catch { }
         return $null
@@ -862,11 +870,14 @@ function Show-MainForm {
     [void]$dgv.Columns.Add('Site', 'Site')
     [void]$dgv.Columns.Add('Role', 'Role')
     [void]$dgv.Columns.Add('Access', 'Access')
+    [void]$dgv.Columns.Add('Direct', 'Direct?')
     [void]$dgv.Columns.Add('URL', 'URL')
-    $dgv.Columns['Site'].FillWeight   = 33
-    $dgv.Columns['Role'].FillWeight   = 12
-    $dgv.Columns['Access'].FillWeight = 23
-    $dgv.Columns['URL'].FillWeight    = 32
+    $dgv.Columns['Site'].FillWeight   = 30
+    $dgv.Columns['Role'].FillWeight   = 10
+    $dgv.Columns['Access'].FillWeight = 22
+    $dgv.Columns['Direct'].FillWeight = 8
+    $dgv.Columns['URL'].FillWeight    = 30
+    $dgv.Columns['Direct'].DefaultCellStyle.Alignment = [System.Windows.Forms.DataGridViewContentAlignment]::MiddleCenter
 
     $btnAdd               = New-Object System.Windows.Forms.Button
     $btnAdd.Text          = "Add to Site..."
@@ -933,7 +944,8 @@ function Show-MainForm {
     $RefreshGrid = {
         $dgv.Rows.Clear()
         foreach ($m in $script:Memberships) {
-            [void]$dgv.Rows.Add($m.SiteName, $m.Role, $m.Sources, $m.SiteUrl)
+            $directIndicator = if ($m.HasDirectAndGroup) { '✓' } else { '' }
+            [void]$dgv.Rows.Add($m.SiteName, $m.Role, $m.Sources, $directIndicator, $m.SiteUrl)
         }
         # Row tinting: amber for Site Admin rows, blue for rows with multiple overlapping grants
         for ($i = 0; $i -lt $dgv.Rows.Count; $i++) {
