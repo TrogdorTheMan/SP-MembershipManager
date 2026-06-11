@@ -404,7 +404,7 @@ function Get-UserSiteMemberships {
         [hashtable]$UserGroupMap = @{}
     )
 
-    $line = Write-Log "Checking $($AllSites.Count) sites in parallel (up to 6 at once)..."
+    $line = Write-Log "Checking $($AllSites.Count) sites in parallel (up to 8 at once)..."
     if ($LogBox) {
         $LogBox.Invoke([Action]{ $LogBox.AppendText("$line`n"); $LogBox.ScrollToCaret() })
     }
@@ -603,7 +603,7 @@ function Get-UserSiteMemberships {
         return $null
     }
 
-    $pool = [System.Management.Automation.Runspaces.RunspaceFactory]::CreateRunspacePool(1, 6)
+    $pool = [System.Management.Automation.Runspaces.RunspaceFactory]::CreateRunspacePool(1, 8)
     $pool.Open()
 
     $jobs = foreach ($site in $AllSites) {
@@ -1249,11 +1249,15 @@ function Show-MainForm {
         $btnRemove.Enabled = $false
         try {
             & $RunScan
-            # Schedule a second scan ~5 s later to catch SP Online replication lag.
-            # SP can take a few seconds to return a consistent view after changes.
+            # Lock the manual Refresh button until the verification pass completes, so the
+            # user can't kick off a competing scan before the initial result is confirmed.
+            $btnRefreshSites.Enabled = $false
+            $lblStatus.Text = "$($lblStatus.Text)  (verifying...)"
+            # Schedule a confirming re-scan shortly after, to catch any SP Online
+            # replication lag (e.g. a stale count right after an add/remove).
             $script:VerifyTargetEmail = $script:SelectedUser.Email
             $script:VerifyTimer = New-Object System.Windows.Forms.Timer
-            $script:VerifyTimer.Interval = 5000
+            $script:VerifyTimer.Interval = 2000
             $script:VerifyTimer.Add_Tick({
                 $script:VerifyTimer.Stop()
                 $script:VerifyTimer.Dispose()
@@ -1261,6 +1265,8 @@ function Show-MainForm {
                 if ($script:SelectedUser -and $script:SelectedUser.Email -eq $script:VerifyTargetEmail) {
                     try { & $RunScan -StatusPrefix "Verifying" } catch { }
                 }
+                # Re-enable manual refresh once the verification pass is done (or skipped).
+                $btnRefreshSites.Enabled = $true
             })
             $script:VerifyTimer.Start()
         } catch {
