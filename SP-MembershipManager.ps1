@@ -185,6 +185,56 @@ function Save-LastUrl {
 }
 
 # ---------------------------------------------------------------------------
+# Consent error dialog
+# ---------------------------------------------------------------------------
+
+function Show-ConsentDialog {
+    param([string]$ConsentUrl)
+    Add-Type -AssemblyName System.Windows.Forms
+    Add-Type -AssemblyName System.Drawing
+
+    $dlg = New-Object System.Windows.Forms.Form
+    $dlg.Text            = "Admin Consent Required"
+    $dlg.Size            = New-Object System.Drawing.Size(480, 260)
+    $dlg.FormBorderStyle = 'FixedDialog'
+    $dlg.StartPosition   = 'CenterScreen'
+    $dlg.MaximizeBox     = $false
+    $dlg.MinimizeBox     = $false
+
+    $icon = New-Object System.Windows.Forms.PictureBox
+    $icon.Location  = New-Object System.Drawing.Point(16, 16)
+    $icon.Size      = New-Object System.Drawing.Size(32, 32)
+    $icon.Image     = [System.Drawing.SystemIcons]::Warning.ToBitmap()
+    $icon.SizeMode  = 'StretchImage'
+
+    $lblMsg = New-Object System.Windows.Forms.Label
+    $lblMsg.Text      = "Admin consent has not been granted for this tenant.`n`nA Global Administrator needs to visit the link below and sign in to grant access. This is a one-time step. Once consent is granted, relaunch the tool."
+    $lblMsg.Location  = New-Object System.Drawing.Point(60, 16)
+    $lblMsg.Size      = New-Object System.Drawing.Size(395, 90)
+    $lblMsg.Font      = New-Object System.Drawing.Font('Segoe UI', 9)
+
+    $link = New-Object System.Windows.Forms.LinkLabel
+    $link.Text      = $ConsentUrl
+    $link.Location  = New-Object System.Drawing.Point(60, 112)
+    $link.Size      = New-Object System.Drawing.Size(395, 60)
+    $link.Font      = New-Object System.Drawing.Font('Segoe UI', 9)
+    $link.AutoSize  = $false
+    $link.Add_LinkClicked({
+        Start-Process $ConsentUrl
+    })
+
+    $btnOk = New-Object System.Windows.Forms.Button
+    $btnOk.Text         = "OK"
+    $btnOk.Location     = New-Object System.Drawing.Point(375, 188)
+    $btnOk.Size         = New-Object System.Drawing.Size(75, 28)
+    $btnOk.DialogResult = 'OK'
+    $dlg.AcceptButton   = $btnOk
+
+    $dlg.Controls.AddRange(@($icon, $lblMsg, $link, $btnOk))
+    [void]$dlg.ShowDialog()
+}
+
+# ---------------------------------------------------------------------------
 # SharePoint operations
 # ---------------------------------------------------------------------------
 
@@ -204,14 +254,9 @@ function Get-ConsentErrorMessage {
     $isConsentError = $consentPatterns | Where-Object { $ErrorText -match $_ }
     if (-not $isConsentError) { return $null }
 
-    $consentUrl = "https://login.microsoftonline.com/common/adminconsent" +
-                  "?client_id=$script:AppClientId" +
-                  "&redirect_uri=https://trogdortheman.github.io/SP-MembershipManager/consent-complete.html"
-
-    return ("Admin consent has not been granted for this tenant.`n`n" +
-            "A Global Administrator needs to visit the following URL and sign in to grant access:`n`n" +
-            "$consentUrl`n`n" +
-            "This is a one-time step per tenant. Once consent is granted, relaunch the tool.")
+    return ("https://login.microsoftonline.com/common/adminconsent" +
+            "?client_id=$script:AppClientId" +
+            "&redirect_uri=https://trogdortheman.github.io/SP-MembershipManager/consent-complete.html")
 }
 
 function Connect-Site {
@@ -742,8 +787,7 @@ function Show-LoadingForm {
     if ($syncHash.Error) {
         $loading.Close()
         $loading.Dispose()
-        $consentMsg = Get-ConsentErrorMessage -ErrorText $syncHash.Error
-        throw $(if ($consentMsg) { $consentMsg } else { $syncHash.Error })
+        throw $syncHash.Error
     }
 
     # Re-establish the PnP connection in the main runspace so the main form can use it.
@@ -1008,7 +1052,7 @@ function Show-MainForm {
                 $consentMsg = Get-ConsentErrorMessage -ErrorText $errText
                 if ($consentMsg) {
                     & $SetStatus "Connection failed: admin consent required."
-                    [System.Windows.Forms.MessageBox]::Show($consentMsg, "Admin Consent Required", 'OK', 'Warning') | Out-Null
+                    Show-ConsentDialog -ConsentUrl $consentMsg
                 } else {
                     & $SetStatus "Connection failed: $errText"
                     [System.Windows.Forms.MessageBox]::Show("Could not connect:`n$errText", "Error", 'OK', 'Error') | Out-Null
@@ -1227,7 +1271,7 @@ try {
     $errText = $_.ToString()
     $consentMsg = Get-ConsentErrorMessage -ErrorText $errText
     if ($consentMsg) {
-        [System.Windows.Forms.MessageBox]::Show($consentMsg, "Admin Consent Required", 'OK', 'Warning') | Out-Null
+        Show-ConsentDialog -ConsentUrl $consentMsg
     } else {
         [System.Windows.Forms.MessageBox]::Show(
             "Could not connect to tenant:`n$errText",
