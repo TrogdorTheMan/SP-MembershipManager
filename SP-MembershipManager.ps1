@@ -404,7 +404,7 @@ function Get-UserSiteMemberships {
         [hashtable]$UserGroupMap = @{}
     )
 
-    $line = Write-Log "Checking $($AllSites.Count) sites in parallel (up to 4 at once)..."
+    $line = Write-Log "Checking $($AllSites.Count) sites in parallel (up to 6 at once)..."
     if ($LogBox) {
         $LogBox.Invoke([Action]{ $LogBox.AppendText("$line`n"); $LogBox.ScrollToCaret() })
     }
@@ -603,7 +603,7 @@ function Get-UserSiteMemberships {
         return $null
     }
 
-    $pool = [System.Management.Automation.Runspaces.RunspaceFactory]::CreateRunspacePool(1, 4)
+    $pool = [System.Management.Automation.Runspaces.RunspaceFactory]::CreateRunspacePool(1, 6)
     $pool.Open()
 
     $jobs = foreach ($site in $AllSites) {
