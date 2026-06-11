@@ -872,12 +872,12 @@ function Show-MainForm {
     [void]$dgv.Columns.Add('Site', 'Site')
     [void]$dgv.Columns.Add('Role', 'Role')
     [void]$dgv.Columns.Add('Access', 'Access')
-    [void]$dgv.Columns.Add('Direct', 'Direct?')
+    [void]$dgv.Columns.Add('Direct', 'Direct & Group')
     [void]$dgv.Columns.Add('URL', 'URL')
     $dgv.Columns['Site'].FillWeight   = 30
     $dgv.Columns['Role'].FillWeight   = 10
     $dgv.Columns['Access'].FillWeight = 22
-    $dgv.Columns['Direct'].FillWeight = 8
+    $dgv.Columns['Direct'].FillWeight = 12
     $dgv.Columns['URL'].FillWeight    = 30
     $dgv.Columns['Direct'].DefaultCellStyle.Alignment = [System.Windows.Forms.DataGridViewContentAlignment]::MiddleCenter
 

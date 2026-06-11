@@ -29,7 +29,7 @@ The grid includes an **Access** column that shows how a user's access was grante
 - **Direct** — the user was explicitly added to the site's Owners, Members, or Visitors group
 - **via GroupName** — access comes from an Entra ID security group (e.g. "via SharePoint Power Users")
 - **Site Admin** — the user is a site collection administrator, the highest SharePoint role
-- Combinations like **Direct + via Power Users** appear when a user has access from more than one source simultaneously; these rows are highlighted in blue
+- When a user has both a direct entry and group-based access on the same site, the Access column shows the group name and the **Direct & Group** column shows ✓; these rows are highlighted in blue
 
 Rows highlighted in **amber** indicate site collection administrators.
 
