@@ -466,27 +466,50 @@ function Get-UserSiteMemberships {
 
                 $members = Get-PnPGroupMember -Group $group
 
-                # Direct user membership: email match + user-type LoginName (starts with 'i:').
-                # The 'i:' prefix is the SharePoint claims format for individual users;
-                # all group entries (Entra groups, SP groups) use 'c:' prefix and are excluded.
-                # Using email rather than constructing the full LoginName avoids mismatches
-                # when the Graph-returned email and the SP LoginName use different domain aliases.
-                if ($members | Where-Object { $_.Email -ieq $UserEmail -and $_.LoginName -like 'i:*' }) {
-                    & $AddGrant $role 'Direct'
+                # Collect all Entra ID group entries in this SP group (LoginName ending with a GUID).
+                $entraGroupsHere = @{}
+                foreach ($m in $members) {
+                    if ($m.LoginName -match '\|([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})$') {
+                        $entraGroupsHere[$Matches[1]] = $m.Title
+                    }
                 }
 
-                # Indirect membership via Entra ID security group.
-                # Entra groups nested in SP groups have LoginName like "c:0t.c|tenant|{guid}".
-                # Extract the trailing GUID and look it up in the user's transitive group map.
-                if ($UserGroupMap -and $UserGroupMap.Count -gt 0) {
-                    foreach ($member in $members) {
-                        if ($member.LoginName -match '\|([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})$') {
-                            $groupId = $Matches[1]
-                            if ($UserGroupMap.ContainsKey($groupId)) {
-                                & $AddGrant $role "via $($UserGroupMap[$groupId])"
+                # Check whether the user has a direct-looking entry (i:0#.f| LoginName).
+                # This may be a true direct add OR an SP membership cache entry written when SP
+                # materializes nested Entra group members as individual user entries.
+                $appearsDirectly = ($members |
+                    Where-Object { $_.Email -ieq $UserEmail -and $_.LoginName -like 'i:*' } |
+                    Measure-Object).Count -gt 0
+
+                if ($entraGroupsHere.Count -gt 0) {
+                    # SP group contains Entra groups — use checkMemberGroups to find which ones
+                    # transitively contain this user. This distinguishes true Direct grants from
+                    # SP membership materialization (SP caches nested group members as i:0#.f|
+                    # entries, making them look directly added when they are not).
+                    try {
+                        $checkBody   = (@{ groupIds = @($entraGroupsHere.Keys) } | ConvertTo-Json -Compress)
+                        $checkResult = Invoke-PnPGraphMethod -Url "users/$UserEmail/checkMemberGroups" -Method Post -Content $checkBody
+                        foreach ($gid in $checkResult.value) {
+                            if ($entraGroupsHere.ContainsKey($gid)) {
+                                & $AddGrant $role "via $($entraGroupsHere[$gid])"
+                            }
+                        }
+                        # Only treat the i:0#.f| entry as Direct when no Entra group explains it.
+                        if ($appearsDirectly -and $checkResult.value.Count -eq 0) {
+                            & $AddGrant $role 'Direct'
+                        }
+                    } catch {
+                        # checkMemberGroups unavailable — fall back to i:* check + UserGroupMap
+                        if ($appearsDirectly) { & $AddGrant $role 'Direct' }
+                        foreach ($gid in $entraGroupsHere.Keys) {
+                            if ($UserGroupMap -and $UserGroupMap.ContainsKey($gid)) {
+                                & $AddGrant $role "via $($UserGroupMap[$gid])"
                             }
                         }
                     }
+                } else {
+                    # No Entra groups in this SP group — an i:0#.f| entry is definitively Direct.
+                    if ($appearsDirectly) { & $AddGrant $role 'Direct' }
                 }
             }
 
@@ -1056,6 +1079,32 @@ function Show-MainForm {
         }
     }
 
+    # Helper: run a full scan for the currently selected user and update the grid.
+    # Used by both the initial user-select handler and the Refresh button.
+    $RunScan = {
+        param([string]$StatusPrefix = "Scanning")
+        $u = $script:SelectedUser
+        if (-not $u) { return }
+        & $SetStatus "$StatusPrefix site access for $($u.DisplayName)..."
+        $gm = Get-UserTransitiveGroupMap -UserUpn $u.Account
+        $script:Memberships = @(Get-UserSiteMemberships -UserEmail $u.Email -AllSites $script:AllSites -LogBox $rtbLog -UserGroupMap $gm)
+        & $RefreshGrid
+        $count      = $script:Memberships.Count
+        $adminCount = @($script:Memberships | Where-Object { $_.Role -eq 'Admin' }).Count
+        $mixedCount = @($script:Memberships | Where-Object { $_.HasMultiple }).Count
+        $btnAdd.Enabled          = $true
+        $btnRefreshSites.Enabled = $true
+        if ($count -eq 0) {
+            & $SetStatus "$($u.DisplayName) has no site access."
+        } else {
+            $extras = @()
+            if ($adminCount -gt 0) { $extras += "$adminCount as site admin" }
+            if ($mixedCount -gt 0) { $extras += "$mixedCount with layered access" }
+            $suffix = if ($extras.Count -gt 0) { " — $($extras -join ', ')" } else { '' }
+            & $SetStatus "$($u.DisplayName) has access to $count site(s)$suffix."
+        }
+    }
+
     # On load: use pre-loaded sites if available    # On load: use pre-loaded sites if available (from loading screen), otherwise connect fresh.
     $form.Add_Load({
         if ($null -ne $PreloadedSites) {
@@ -1120,32 +1169,28 @@ function Show-MainForm {
     $lstUsers.Add_SelectedIndexChanged({
         $idx = $lstUsers.SelectedIndex
         if ($idx -lt 0 -or $idx -ge $script:UserResults.Count) { return }
+        # Cancel any pending auto-verify re-scan from a prior selection
+        if ($script:VerifyTimer) { $script:VerifyTimer.Stop(); $script:VerifyTimer.Dispose(); $script:VerifyTimer = $null }
         $script:SelectedUser = $script:UserResults[$idx]
         $lblSelectedUser.Text = "$($script:SelectedUser.DisplayName)  |  $($script:SelectedUser.Email)"
         $dgv.Rows.Clear()
         $btnRemove.Enabled = $false
-        & $SetStatus "Loading site memberships for $($script:SelectedUser.DisplayName)..."
-
         try {
-            & $SetStatus "Resolving group memberships for $($script:SelectedUser.DisplayName)..."
-            $groupMap = Get-UserTransitiveGroupMap -UserUpn $script:SelectedUser.Account
-            & $SetStatus "Scanning site access for $($script:SelectedUser.DisplayName)..."
-            $script:Memberships = @(Get-UserSiteMemberships -UserEmail $script:SelectedUser.Email -AllSites $script:AllSites -LogBox $rtbLog -UserGroupMap $groupMap)
-            & $RefreshGrid
-            $count       = $script:Memberships.Count
-            $adminCount  = @($script:Memberships | Where-Object { $_.Role -eq 'Admin' }).Count
-            $mixedCount  = @($script:Memberships | Where-Object { $_.HasMultiple }).Count
-            if ($count -eq 0) {
-                & $SetStatus "$($script:SelectedUser.DisplayName) has no site access."
-            } else {
-                $extras = @()
-                if ($adminCount -gt 0) { $extras += "$adminCount as site admin" }
-                if ($mixedCount -gt 0) { $extras += "$mixedCount with layered access" }
-                $suffix = if ($extras.Count -gt 0) { " — $($extras -join ', ')" } else { '' }
-                & $SetStatus "$($script:SelectedUser.DisplayName) has access to $count site(s)$suffix."
-            }
-            $btnAdd.Enabled          = $true
-            $btnRefreshSites.Enabled = $true
+            & $RunScan
+            # Schedule a second scan ~5 s later to catch SP Online replication lag.
+            # SP can take a few seconds to return a consistent view after changes.
+            $verifyEmail = $script:SelectedUser.Email
+            $script:VerifyTimer = New-Object System.Windows.Forms.Timer
+            $script:VerifyTimer.Interval = 5000
+            $script:VerifyTimer.Add_Tick({
+                $script:VerifyTimer.Stop()
+                $script:VerifyTimer.Dispose()
+                $script:VerifyTimer = $null
+                if ($script:SelectedUser -and $script:SelectedUser.Email -eq $verifyEmail) {
+                    try { & $RunScan -StatusPrefix "Verifying" } catch { }
+                }
+            })
+            $script:VerifyTimer.Start()
         } catch {
             & $SetStatus "Failed to load memberships: $_"
             [System.Windows.Forms.MessageBox]::Show($_.ToString(), "Error", 'OK', 'Error') | Out-Null
@@ -1188,6 +1233,7 @@ function Show-MainForm {
         $dlgForm.AcceptButton = $btnOk; $dlgForm.CancelButton = $btnCx
         $dlgForm.Controls.AddRange(@($lblS,$cmbS,$lblR,$cmbR,$btnOk,$btnCx))
 
+   
         if ($dlgForm.ShowDialog() -eq 'OK') {
             $site = $script:AllSites[$cmbS.SelectedIndex]
             $role = $cmbR.SelectedItem
@@ -1251,20 +1297,9 @@ function Show-MainForm {
     # Refresh site access (re-scans for currently selected user)
     $btnRefreshSites.Add_Click({
         if (-not $script:SelectedUser) { return }
-        & $SetStatus "Refreshing site memberships for $($script:SelectedUser.DisplayName)..."
-        try {
-            $groupMap = Get-UserTransitiveGroupMap -UserUpn $script:SelectedUser.Account
-            $script:Memberships = @(Get-UserSiteMemberships -UserEmail $script:SelectedUser.Email -AllSites $script:AllSites -LogBox $rtbLog -UserGroupMap $groupMap)
-            & $RefreshGrid
-            $count      = $script:Memberships.Count
-            $adminCount = @($script:Memberships | Where-Object { $_.Role -eq 'Admin' }).Count
-            $mixedCount = @($script:Memberships | Where-Object { $_.HasMultiple }).Count
-            $extras = @()
-            if ($adminCount -gt 0) { $extras += "$adminCount as site admin" }
-            if ($mixedCount -gt 0) { $extras += "$mixedCount with layered access" }
-            $suffix = if ($extras.Count -gt 0) { " — $($extras -join ', ')" } else { '' }
-            & $SetStatus "$($script:SelectedUser.DisplayName) has access to $count site(s)$suffix."
-        } catch {
+        if ($script:VerifyTimer) { $script:VerifyTimer.Stop(); $script:VerifyTimer.Dispose(); $script:VerifyTimer = $null }
+        try { & $RunScan -StatusPrefix "Refreshing" }
+        catch {
             & $SetStatus "Refresh failed: $_"
             [System.Windows.Forms.MessageBox]::Show($_.ToString(), "Error", 'OK', 'Error') | Out-Null
         }
