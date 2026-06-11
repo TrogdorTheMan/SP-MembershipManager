@@ -1154,7 +1154,7 @@ function Show-MainForm {
     # Helper: run a full scan for the currently selected user and update the grid.
     # Used by both the initial user-select handler and the Refresh button.
     $RunScan = {
-        param([string]$StatusPrefix = "Scanning")
+        param([string]$StatusPrefix = "Searching")
         $u = $script:SelectedUser
         if (-not $u) { return }
         & $SetStatus "$StatusPrefix site access for $($u.DisplayName)..."
@@ -1252,7 +1252,7 @@ function Show-MainForm {
             # Lock the manual Refresh button until the verification pass completes, so the
             # user can't kick off a competing scan before the initial result is confirmed.
             $btnRefreshSites.Enabled = $false
-            $lblStatus.Text = "$($lblStatus.Text)  (verifying...)"
+            $lblStatus.Text = "$($lblStatus.Text)  (validating...)"
             # Schedule a confirming re-scan shortly after, to catch any SP Online
             # replication lag (e.g. a stale count right after an add/remove).
             $script:VerifyTargetEmail = $script:SelectedUser.Email
@@ -1263,7 +1263,7 @@ function Show-MainForm {
                 $script:VerifyTimer.Dispose()
                 $script:VerifyTimer = $null
                 if ($script:SelectedUser -and $script:SelectedUser.Email -eq $script:VerifyTargetEmail) {
-                    try { & $RunScan -StatusPrefix "Verifying" } catch { }
+                    try { & $RunScan -StatusPrefix "Validating" } catch { }
                 }
                 # Re-enable manual refresh once the verification pass is done (or skipped).
                 $btnRefreshSites.Enabled = $true
@@ -1376,7 +1376,9 @@ function Show-MainForm {
     $btnRefreshSites.Add_Click({
         if (-not $script:SelectedUser) { return }
         if ($script:VerifyTimer) { $script:VerifyTimer.Stop(); $script:VerifyTimer.Dispose(); $script:VerifyTimer = $null }
-        try { & $RunScan -StatusPrefix "Refreshing" }
+        # Clear the grid so stale rows don't linger while the re-scan runs.
+        $dgv.Rows.Clear()
+        try { & $RunScan -StatusPrefix "Searching" }
         catch {
             & $SetStatus "Refresh failed: $_"
             [System.Windows.Forms.MessageBox]::Show($_.ToString(), "Error", 'OK', 'Error') | Out-Null
