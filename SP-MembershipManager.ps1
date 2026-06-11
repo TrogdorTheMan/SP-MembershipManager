@@ -911,6 +911,7 @@ function Show-MainForm {
     $script:AllSites     = @()
     $script:UserResults  = @()
     $script:Memberships  = @()
+    $script:VerifyTimer  = $null
     $script:SelectedUser = $null
 
     # Form
