@@ -232,19 +232,28 @@ function Show-ConsentDialog {
     $link.Font        = $font
     $link.Add_LinkClicked({ Start-Process $ConsentUrl })
 
+    $btnCopy = New-Object System.Windows.Forms.Button
+    $btnCopy.Text = "Copy URL"
+    $btnCopy.Size = New-Object System.Drawing.Size(90, 28)
+    $btnCopy.Add_Click({
+        [System.Windows.Forms.Clipboard]::SetText($ConsentUrl)
+        $btnCopy.Text = "Copied!"
+    })
+
     $btnOk = New-Object System.Windows.Forms.Button
     $btnOk.Text         = "OK"
     $btnOk.Size         = New-Object System.Drawing.Size(75, 28)
     $btnOk.DialogResult = 'OK'
     $dlg.AcceptButton   = $btnOk
 
-    $dlg.Controls.AddRange(@($icon, $lblMsg, $link, $btnOk))
+    $dlg.Controls.AddRange(@($icon, $lblMsg, $link, $btnCopy, $btnOk))
 
-    # Position OK after controls are added so we know the link's final height
+    # Position buttons after controls are added so we know the link's final height
     $dlg.Add_Shown({
         $btnY = $link.Bottom + $gap
-        $btnOk.Location = New-Object System.Drawing.Point(($textX + $contentW - $btnOk.Width), $btnY)
-        $dlg.ClientSize = New-Object System.Drawing.Size(($textX + $contentW + $margin), ($btnY + $btnOk.Height + $margin))
+        $btnOk.Location   = New-Object System.Drawing.Point(($textX + $contentW - $btnOk.Width), $btnY)
+        $btnCopy.Location = New-Object System.Drawing.Point(($btnOk.Left - $btnCopy.Width - $gap), $btnY)
+        $dlg.ClientSize   = New-Object System.Drawing.Size(($textX + $contentW + $margin), ($btnY + $btnOk.Height + $margin))
     })
 
     [void]$dlg.ShowDialog()
