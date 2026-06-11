@@ -408,9 +408,11 @@ function Get-UserSiteMemberships {
             $directRole = if ($directGrants.Count -gt 0) { $directGrants[0].Role } else { $null }
 
             # Unique source names, sorted
-            $allSources    = @($grantList | ForEach-Object { $_.Source } | Select-Object -Unique | Sort-Object)
+            $allSources      = @($grantList | ForEach-Object { $_.Source } | Select-Object -Unique | Sort-Object)
             $viaGroupSources = @($allSources | Where-Object { $_ -like 'via *' })
-            $hasDirectGrant  = [bool]($grantList | Where-Object { $_.Source -eq 'Direct' })
+            # Derive from already-computed $directRole — avoids [bool](PSCustomObject) cast
+            # which throws in PowerShell 7 when the pipeline returns a single object.
+            $hasDirectGrant  = ($null -ne $directRole)
 
             # Suppress "Direct" from the Access display when group sources already explain access.
             # SP materializes nested group members as i:0#.f| entries, making them look direct.
