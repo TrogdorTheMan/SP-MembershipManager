@@ -408,7 +408,11 @@ function Invoke-AuthGate {
     } catch {
         Write-Log "Auth gate: sign-in failed - $_" | Out-Null
         $consentUrl = Get-ConsentErrorMessage -ErrorText $_.ToString() -ClientId $script:GateClientId
-        if ($consentUrl) { Show-ConsentDialog -ConsentUrl $consentUrl }
+        if ($consentUrl) {
+            Show-ConsentDialog -ConsentUrl $consentUrl
+            $certConsentUrl = Get-ConsentErrorMessage -ErrorText 'AADSTS65001' -ClientId $script:AppClientId
+            Show-ConsentDialog -ConsentUrl $certConsentUrl
+        }
         return @{ Authorized = $false; Cancelled = $false; Upn = ''; Reason = "signin: $($_.Exception.Message)" }
     }
 
