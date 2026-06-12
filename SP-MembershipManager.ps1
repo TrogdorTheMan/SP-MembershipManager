@@ -271,9 +271,26 @@ function Invoke-AuthGate {
         return @{ Authorized = $true; Cancelled = $false; Upn = ''; Reason = 'gate-disabled' }
     }
 
-    # MSAL.NET is loaded by PnP.PowerShell (imported in Ensure-PnPModule). Build a
-    # public client; the process keeps no token cache, so each launch is a fresh
-    # sign-in and SelectAccount forces the account prompt every time.
+    # MSAL.NET is bundled with PnP.PowerShell but loaded lazily. Ensure it is
+    # available before we try to use PublicClientApplicationBuilder.
+    if (-not ([System.Management.Automation.PSTypeName]'Microsoft.Identity.Client.PublicClientApplicationBuilder').Type) {
+        $pnpMod = Get-Module PnP.PowerShell
+        if ($pnpMod) {
+            $msalDll = Join-Path (Split-Path $pnpMod.Path) 'Core\Microsoft.Identity.Client.dll'
+            if (Test-Path $msalDll) {
+                Add-Type -Path $msalDll
+            } else {
+                Write-Log "Auth gate: MSAL DLL not found at expected path: $msalDll" | Out-Null
+                return @{ Authorized = $false; Cancelled = $false; Upn = ''; Reason = "msal-not-found: $msalDll" }
+            }
+        } else {
+            Write-Log "Auth gate: PnP.PowerShell not loaded -- cannot locate MSAL." | Out-Null
+            return @{ Authorized = $false; Cancelled = $false; Upn = ''; Reason = 'msal-not-found: PnP module not loaded' }
+        }
+    }
+
+    # Build a public client; no token cache so each launch is a fresh sign-in
+    # and SelectAccount forces the account prompt every time.
     try {
         $app = [Microsoft.Identity.Client.PublicClientApplicationBuilder]::Create($script:GateClientId).
             WithAuthority($script:GateAuthority).
