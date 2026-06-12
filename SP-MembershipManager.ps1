@@ -1355,6 +1355,16 @@ function Show-MainForm {
     $dgv.Columns['URL'].FillWeight    = 30
     $dgv.Columns['Direct'].DefaultCellStyle.Alignment = [System.Windows.Forms.DataGridViewContentAlignment]::MiddleCenter
 
+    $lblScanOverlay           = New-Object System.Windows.Forms.Label
+    $lblScanOverlay.Location  = New-Object System.Drawing.Point(348, 88)
+    $lblScanOverlay.Size      = New-Object System.Drawing.Size(626, 304)
+    $lblScanOverlay.Anchor    = [System.Windows.Forms.AnchorStyles]::Top -bor [System.Windows.Forms.AnchorStyles]::Left -bor [System.Windows.Forms.AnchorStyles]::Right -bor [System.Windows.Forms.AnchorStyles]::Bottom
+    $lblScanOverlay.TextAlign = [System.Drawing.ContentAlignment]::MiddleCenter
+    $lblScanOverlay.ForeColor = [System.Drawing.Color]::Gray
+    $lblScanOverlay.Font      = New-Object System.Drawing.Font('Segoe UI', 10, [System.Drawing.FontStyle]::Italic)
+    $lblScanOverlay.Text      = "Searching and validating..."
+    $lblScanOverlay.Visible   = $false
+
     $btnAdd               = New-Object System.Windows.Forms.Button
     $btnAdd.Text          = "Add to Site..."
     $btnAdd.Location      = New-Object System.Drawing.Point(348, 400)
@@ -1402,7 +1412,7 @@ function Show-MainForm {
     # Add controls
     $form.Controls.AddRange(@(
         $lblSignedIn, $lblSearch, $txtSearch, $btnSearch, $btnRefreshSearch, $lstUsers,
-        $divider, $lblSites, $lblSelectedUser, $dgv,
+        $divider, $lblSites, $lblSelectedUser, $dgv, $lblScanOverlay,
         $btnAdd, $btnRemove, $btnRefreshSites, $btnAbout, $rtbLog, $status
     ))
 
@@ -1418,6 +1428,8 @@ function Show-MainForm {
 
     # Helper: refresh site grid
     $RefreshGrid = {
+        $lblScanOverlay.Visible = $false
+        $dgv.Visible = $true
         $dgv.Rows.Clear()
         foreach ($m in $script:Memberships) {
             $directIndicator = if ($m.HasDirectAndGroup) { '✓' } else { '' }
@@ -1455,7 +1467,7 @@ function Show-MainForm {
     # Helper: run a full scan for the currently selected user and update the grid.
     # Used by both the initial user-select handler and the Refresh button.
     $RunScan = {
-        param([string]$StatusPrefix = "Searching")
+        param([string]$StatusPrefix = "Searching", [bool]$HoldGrid = $false)
         if ($script:ScanRunning) { return }   # guard against a re-entrant scan
         $u = $script:SelectedUser
         if (-not $u) { return }
@@ -1465,7 +1477,7 @@ function Show-MainForm {
             & $SetStatus "$StatusPrefix site access for $($u.DisplayName)..."
             $gm = Get-UserTransitiveGroupMap -UserUpn $u.Account
             $script:Memberships = @(Get-UserSiteMemberships -UserEmail $u.Email -AllSites $script:AllSites -LogBox $rtbLog -UserGroupMap $gm)
-            & $RefreshGrid
+            if (-not $HoldGrid) { & $RefreshGrid }
             $count      = $script:Memberships.Count
             $adminCount = @($script:Memberships | Where-Object { $_.Role -eq 'Admin' }).Count
             $mixedCount = @($script:Memberships | Where-Object { $_.HasMultiple }).Count
@@ -1556,9 +1568,12 @@ function Show-MainForm {
         $script:SelectedUser = $script:UserResults[$idx]
         $lblSelectedUser.Text = "$($script:SelectedUser.DisplayName)  |  $($script:SelectedUser.Email)"
         $dgv.Rows.Clear()
+        $dgv.Visible = $false
+        $lblScanOverlay.Text = "Searching and validating..."
+        $lblScanOverlay.Visible = $true
         $btnRemove.Enabled = $false
         try {
-            & $RunScan
+            & $RunScan -HoldGrid $true
             # Keep the site-access actions locked through the pending validation pass so the
             # user can't change membership or kick off a competing scan before it confirms.
             # The left-hand search panel stays usable so they can switch users if they want.
@@ -1584,6 +1599,8 @@ function Show-MainForm {
             })
             $script:VerifyTimer.Start()
         } catch {
+            $lblScanOverlay.Visible = $false
+            $dgv.Visible = $true
             & $SetStatus "Failed to load memberships: $_"
             [System.Windows.Forms.MessageBox]::Show($_.ToString(), "Error", 'OK', 'Error') | Out-Null
         }
@@ -1690,10 +1707,33 @@ function Show-MainForm {
     $btnRefreshSites.Add_Click({
         if ($script:UiLocked -or -not $script:SelectedUser) { return }
         if ($script:VerifyTimer) { $script:VerifyTimer.Stop(); $script:VerifyTimer.Dispose(); $script:VerifyTimer = $null }
-        # Clear the grid so stale rows don't linger while the re-scan runs.
         $dgv.Rows.Clear()
-        try { & $RunScan -StatusPrefix "Searching" }
-        catch {
+        $dgv.Visible = $false
+        $lblScanOverlay.Text = "Searching and validating..."
+        $lblScanOverlay.Visible = $true
+        try {
+            & $RunScan -HoldGrid $true
+            $btnAdd.Enabled          = $false
+            $btnRemove.Enabled       = $false
+            $btnRefreshSites.Enabled = $false
+            $script:UiLocked         = $true
+            $lblStatus.Text = "$($lblStatus.Text)  (validating...)"
+            $script:VerifyTargetEmail = $script:SelectedUser.Email
+            $script:VerifyTimer = New-Object System.Windows.Forms.Timer
+            $script:VerifyTimer.Interval = 2000
+            $script:VerifyTimer.Add_Tick({
+                $script:VerifyTimer.Stop()
+                $script:VerifyTimer.Dispose()
+                $script:VerifyTimer = $null
+                if ($script:SelectedUser -and $script:SelectedUser.Email -eq $script:VerifyTargetEmail) {
+                    try { & $RunScan -StatusPrefix "Validating" } catch { }
+                }
+                & $SetControlsBusy $false
+            })
+            $script:VerifyTimer.Start()
+        } catch {
+            $lblScanOverlay.Visible = $false
+            $dgv.Visible = $true
             & $SetStatus "Refresh failed: $_"
             [System.Windows.Forms.MessageBox]::Show($_.ToString(), "Error", 'OK', 'Error') | Out-Null
         }
