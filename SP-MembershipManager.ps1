@@ -93,6 +93,21 @@ $script:CertPath          = ""
 $script:CertPassword      = $null
 $script:CertPasswordPlain = ""
 
+# Auth gate (user authorization) -- a SEPARATE public-client app registration,
+# distinct from the cert-based app-only reg above. On launch the human running the
+# tool signs in interactively; access continues only if they are a member of the
+# security group identified by $script:GateGroupId. Both values come from
+# app-config.json for now and will be baked in per-client at build time (#17).
+# When both are empty the gate is skipped (backward compatible).
+$script:GateClientId      = ""
+$script:GateGroupId       = ""
+# Optional: an email address or URL shown on the Access Denied dialog as a
+# "Request Access" action so a denied user knows how to ask for access.
+$script:GateRequestContact = ""
+# Multitenant work/school sign-in. Each user authenticates against their own
+# home tenant; the groups claim reflects that tenant's directory.
+$script:GateAuthority     = "https://login.microsoftonline.com/organizations"
+
 # When running via the C# launcher, $LauncherDir is the exe's directory.
 # When running directly as a .ps1, use $PSScriptRoot.
 $script:ScriptRoot = if ($LauncherDir) {
@@ -170,6 +185,33 @@ function Load-AppConfig {
     $script:CertPasswordPlain = $plainPassword
     $script:CertPassword      = ConvertTo-SecureString $plainPassword -AsPlainText -Force
     $script:TenantName        = $cfg.Tenant
+
+    # Auth gate config. Both keys present -> gate enforced. Both absent -> gate
+    # skipped (existing deployments keep working until they set up the reg). Only
+    # one present is treated as a misconfiguration and blocks startup, so a
+    # half-configured gate can never silently fail open.
+    $gateClient = if ($cfg.PSObject.Properties.Item('GateClientId')) { [string]$cfg.GateClientId } else { '' }
+    $gateGroup  = if ($cfg.PSObject.Properties.Item('GateGroupId'))  { [string]$cfg.GateGroupId }  else { '' }
+    if ($gateClient -and -not $gateGroup) {
+        [System.Windows.Forms.MessageBox]::Show(
+            "app-config.json sets GateClientId but is missing GateGroupId.`n`nProvide both to enable the sign-in gate, or remove both to disable it.",
+            "Configuration Error", 'OK', 'Error') | Out-Null
+        exit
+    }
+    if ($gateGroup -and -not $gateClient) {
+        [System.Windows.Forms.MessageBox]::Show(
+            "app-config.json sets GateGroupId but is missing GateClientId.`n`nProvide both to enable the sign-in gate, or remove both to disable it.",
+            "Configuration Error", 'OK', 'Error') | Out-Null
+        exit
+    }
+    $script:GateClientId = $gateClient
+    $script:GateGroupId  = $gateGroup
+    if ($cfg.PSObject.Properties.Item('GateAuthority') -and $cfg.GateAuthority) {
+        $script:GateAuthority = [string]$cfg.GateAuthority
+    }
+    if ($cfg.PSObject.Properties.Item('GateRequestContact')) {
+        $script:GateRequestContact = [string]$cfg.GateRequestContact
+    }
 }
 
 function Get-LastUrl {
@@ -182,6 +224,209 @@ function Get-LastUrl {
 function Save-LastUrl {
     param([string]$Url)
     try { Set-Content $script:LastUrlFile $Url } catch { }
+}
+
+# ---------------------------------------------------------------------------
+# Auth gate -- interactive user authorization
+#
+# A separate public-client app registration (NOT the cert app-only reg) signs the
+# human in interactively on every launch. Access continues only if the signed-in
+# user's id_token carries the required security-group object id in its groups
+# claim. No Graph permission is needed: the groups claim is read straight from the
+# token. The gate fails closed on every error path.
+# ---------------------------------------------------------------------------
+
+function ConvertFrom-Base64Url {
+    # Decode a base64url string (a JWT segment) to UTF-8 text.
+    param([string]$Value)
+    $s = $Value.Replace('-', '+').Replace('_', '/')
+    switch ($s.Length % 4) {
+        2 { $s += '==' }
+        3 { $s += '=' }
+        0 { }
+        default { throw "Invalid base64url length." }
+    }
+    return [System.Text.Encoding]::UTF8.GetString([System.Convert]::FromBase64String($s))
+}
+
+function Get-IdTokenClaims {
+    # Return the decoded payload of a JWT id_token as a PSCustomObject, or $null.
+    param([string]$IdToken)
+    if (-not $IdToken) { return $null }
+    $parts = $IdToken.Split('.')
+    if ($parts.Count -lt 2) { return $null }
+    try {
+        return (ConvertFrom-Base64Url -Value $parts[1] | ConvertFrom-Json)
+    } catch {
+        return $null
+    }
+}
+
+function Invoke-AuthGate {
+    # Interactive sign-in + security-group authorization check.
+    # Returns @{ Authorized=[bool]; Cancelled=[bool]; Upn=[string]; Reason=[string] }.
+    # When the gate is not configured it is skipped and reports Authorized=$true.
+    if (-not $script:GateClientId -or -not $script:GateGroupId) {
+        Write-Log "Auth gate not configured (GateClientId/GateGroupId empty) -- skipping." | Out-Null
+        return @{ Authorized = $true; Cancelled = $false; Upn = ''; Reason = 'gate-disabled' }
+    }
+
+    # MSAL.NET is loaded by PnP.PowerShell (imported in Ensure-PnPModule). Build a
+    # public client; the process keeps no token cache, so each launch is a fresh
+    # sign-in and SelectAccount forces the account prompt every time.
+    try {
+        $app = [Microsoft.Identity.Client.PublicClientApplicationBuilder]::Create($script:GateClientId).
+            WithAuthority($script:GateAuthority).
+            WithRedirectUri("http://localhost").
+            Build()
+    } catch {
+        Write-Log "Auth gate: failed to build MSAL client - $_" | Out-Null
+        return @{ Authorized = $false; Cancelled = $false; Upn = ''; Reason = "msal-init: $($_.Exception.Message)" }
+    }
+
+    # openid + profile yield an id_token containing the groups claim; no Graph scope.
+    $scopes = [string[]]@('openid', 'profile')
+    try {
+        $result = $app.AcquireTokenInteractive($scopes).
+            WithPrompt([Microsoft.Identity.Client.Prompt]::SelectAccount).
+            WithUseEmbeddedWebView($false).
+            ExecuteAsync().GetAwaiter().GetResult()
+    } catch [Microsoft.Identity.Client.MsalClientException] {
+        # e.g. authentication_canceled -- the user closed the browser.
+        Write-Log "Auth gate: sign-in cancelled or client error - $($_.Exception.Message)" | Out-Null
+        return @{ Authorized = $false; Cancelled = $true; Upn = ''; Reason = "cancelled: $($_.Exception.Message)" }
+    } catch {
+        Write-Log "Auth gate: sign-in failed - $_" | Out-Null
+        return @{ Authorized = $false; Cancelled = $false; Upn = ''; Reason = "signin: $($_.Exception.Message)" }
+    }
+
+    $claims = Get-IdTokenClaims -IdToken $result.IdToken
+    $upn = ''
+    if ($claims) {
+        if ($claims.PSObject.Properties.Item('preferred_username')) { $upn = [string]$claims.preferred_username }
+        elseif ($claims.PSObject.Properties.Item('upn'))            { $upn = [string]$claims.upn }
+    }
+    if (-not $upn -and $result.Account) { $upn = [string]$result.Account.Username }
+
+    # Group overage: if the user is in too many groups, AAD drops the groups claim
+    # and emits _claim_names/_claim_sources (or hasgroups=true) instead. Fail closed
+    # and tell the admin to scope the claim to "Groups assigned to the application"
+    # so the gate group is always emitted inline.
+    $hasOverage = $claims -and (
+        $claims.PSObject.Properties.Item('_claim_names') -or
+        ($claims.PSObject.Properties.Item('hasgroups') -and $claims.hasgroups))
+    $groupClaim = if ($claims -and $claims.PSObject.Properties.Item('groups')) { $claims.groups } else { $null }
+
+    if (-not $groupClaim) {
+        if ($hasOverage) {
+            Write-Log "Auth gate: groups claim overage for '$upn' -- failing closed." | Out-Null
+            return @{ Authorized = $false; Cancelled = $false; Upn = $upn; Reason = 'overage' }
+        }
+        Write-Log "Auth gate: no groups claim present for '$upn' -- denying." | Out-Null
+        return @{ Authorized = $false; Cancelled = $false; Upn = $upn; Reason = 'no-groups-claim' }
+    }
+
+    $authorized = @($groupClaim) -contains $script:GateGroupId
+    if ($authorized) {
+        Write-Log "Auth gate: '$upn' authorized via group $script:GateGroupId." | Out-Null
+        return @{ Authorized = $true; Cancelled = $false; Upn = $upn; Reason = 'ok' }
+    }
+    Write-Log "Auth gate: '$upn' is not a member of the required group -- denying." | Out-Null
+    return @{ Authorized = $false; Cancelled = $false; Upn = $upn; Reason = 'not-in-group' }
+}
+
+function Resolve-RequestContactLink {
+    # Turn a configured contact (bare email or URL) into a launchable link, or '' if none.
+    param([string]$Contact)
+    $c = if ($Contact) { $Contact.Trim() } else { '' }
+    if (-not $c) { return '' }
+    if ($c -match '^(https?:|mailto:)') { return $c }
+    if ($c -match '^[^@\s]+@[^@\s]+\.[^@\s]+$') {
+        $subject = [Uri]::EscapeDataString('Access request: SP-MembershipManager')
+        return "mailto:$c`?subject=$subject"
+    }
+    return $c
+}
+
+function Show-AccessDeniedDialog {
+    param([string]$Upn, [string]$Reason)
+    Add-Type -AssemblyName System.Windows.Forms
+    Add-Type -AssemblyName System.Drawing
+
+    $margin   = 16
+    $iconW    = 32
+    $gap      = 12
+    $textX    = $margin + $iconW + $gap
+    $contentW = 380
+
+    $who = if ($Upn) { "`n`nSigned in as: $Upn" } else { '' }
+    $message = if ($Reason -eq 'overage') {
+        "You're signed in, but your account belongs to too many groups for the sign-in to confirm your access automatically.$who`n`nThis is a configuration limit, not a denial. Please ask your administrator to set the app's groups claim to `"Groups assigned to the application,`" then try again."
+    } else {
+        "You're signed in, but your account isn't a member of the security group approved to use SP-MembershipManager, so the tool can't open.$who`n`nIf you need access for your role, you can request it below or reach out to your IT team. No changes have been made."
+    }
+
+    $link = Resolve-RequestContactLink -Contact $script:GateRequestContact
+
+    $dlg = New-Object System.Windows.Forms.Form
+    $dlg.Text            = "Access Denied"
+    $dlg.FormBorderStyle = 'FixedDialog'
+    $dlg.StartPosition   = 'CenterScreen'
+    $dlg.MaximizeBox     = $false
+    $dlg.MinimizeBox     = $false
+    $dlg.Padding         = New-Object System.Windows.Forms.Padding($margin)
+
+    $icon = New-Object System.Windows.Forms.PictureBox
+    $icon.Location = New-Object System.Drawing.Point($margin, $margin)
+    $icon.Size     = New-Object System.Drawing.Size($iconW, $iconW)
+    $icon.Image    = [System.Drawing.SystemIcons]::Information.ToBitmap()
+    $icon.SizeMode = 'StretchImage'
+
+    $font = New-Object System.Drawing.Font('Segoe UI', 9)
+
+    $lblMsg = New-Object System.Windows.Forms.Label
+    $lblMsg.Text        = $message
+    $lblMsg.Location    = New-Object System.Drawing.Point($textX, $margin)
+    $lblMsg.MaximumSize = New-Object System.Drawing.Size($contentW, 0)
+    $lblMsg.AutoSize    = $true
+    $lblMsg.Font        = $font
+
+    $btnClose = New-Object System.Windows.Forms.Button
+    $btnClose.Text         = "Close"
+    $btnClose.Size         = New-Object System.Drawing.Size(85, 28)
+    $btnClose.DialogResult = 'OK'
+    $dlg.AcceptButton      = $btnClose
+    $dlg.CancelButton      = $btnClose
+
+    $controls = @($icon, $lblMsg, $btnClose)
+
+    $btnRequest = $null
+    if ($link) {
+        $btnRequest = New-Object System.Windows.Forms.Button
+        $btnRequest.Text = "Request Access"
+        $btnRequest.Size = New-Object System.Drawing.Size(120, 28)
+        $btnRequest.Add_Click({
+            try { Start-Process $link } catch {
+                [System.Windows.Forms.MessageBox]::Show(
+                    "Couldn't open the request link automatically. Please contact: $script:GateRequestContact",
+                    "Request Access", 'OK', 'Information') | Out-Null
+            }
+        }.GetNewClosure())
+        $controls += $btnRequest
+    }
+
+    $dlg.Controls.AddRange($controls)
+
+    $dlg.Add_Shown({
+        $btnY = $lblMsg.Bottom + ($gap * 2)
+        $btnClose.Location = New-Object System.Drawing.Point(($textX + $contentW - $btnClose.Width), $btnY)
+        if ($btnRequest) {
+            $btnRequest.Location = New-Object System.Drawing.Point(($btnClose.Left - $btnRequest.Width - $gap), $btnY)
+        }
+        $dlg.ClientSize = New-Object System.Drawing.Size(($textX + $contentW + $margin), ($btnY + $btnClose.Height + $margin))
+    })
+
+    [void]$dlg.ShowDialog()
 }
 
 # ---------------------------------------------------------------------------
@@ -1433,6 +1678,15 @@ Ensure-PnPModule
 Add-Type -AssemblyName System.Windows.Forms
 
 Load-AppConfig
+
+# Authorization gate: the user signs in interactively and must be a member of the
+# approved security group. This runs before any cert connection, so an
+# unauthorized user never reaches the privileged app-only SharePoint session.
+$gate = Invoke-AuthGate
+if (-not $gate.Authorized) {
+    if (-not $gate.Cancelled) { Show-AccessDeniedDialog -Upn $gate.Upn -Reason $gate.Reason }
+    exit
+}
 
 $adminUrl = Show-AdminUrlDialog
 if (-not $adminUrl) { exit }

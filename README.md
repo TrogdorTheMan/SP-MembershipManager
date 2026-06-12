@@ -79,6 +79,25 @@ If you fork this repo, you can substitute your own multi-tenant Entra ID app reg
 
 Then replace `$script:AppClientId` near the top of `SP-MembershipManager.ps1` with your own Client ID, generate a certificate for your app registration, and update `app-config.json` with the cert path and your tenant name.
 
+## Restricting who can use the app (sign-in gate)
+
+By default the tool runs with the app-only certificate, so anyone who can launch the exe inherits its access. The optional sign-in gate closes that gap: on every launch the user must sign in interactively, and access continues only if they belong to a security group you designate in Microsoft Entra. The gate runs before any SharePoint connection, so an unauthorized user never reaches the privileged session.
+
+The gate is **off until you configure it** (the `GateClientId` and `GateGroupId` fields in `app-config.json` are empty by default). To turn it on:
+
+**1. Pick the Microsoft Entra security group that authorizes use.** In Entra ID, choose or create a security group whose members are allowed to run the tool, then copy its **Object ID**. This is the single most important step — only members of this group will be allowed past the sign-in. Put the Object ID in `GateGroupId`.
+
+**2. Create a dedicated public-client app registration** (keep this separate from the certificate app-only registration above). At [portal.azure.com](https://portal.azure.com) → App registrations → New registration:
+
+- Supported account types: Accounts in any organizational directory (Multitenant)
+- **Authentication → Add a platform → Mobile and desktop applications**, add the redirect URI `http://localhost`
+- **API permissions → Microsoft Graph → Delegated:** `openid` and `profile` (no Graph data permissions are needed — group membership is read from the sign-in token, not from Graph)
+- **Token configuration → Add groups claim:** emit groups in the **ID token**. Choose **Groups assigned to the application** (recommended — it keeps the claim small and avoids the 200-group overage that would otherwise block users in many groups), then assign your authorizing group to the app under Enterprise applications. If you instead choose **Security groups**, users who belong to more than ~200 groups will be denied with guidance to switch to the assigned-groups option.
+
+**3. Fill in `app-config.json`.** Set `GateClientId` to the new registration's Application (client) ID and `GateGroupId` to the group Object ID from step 1. Provide both or neither — setting only one is treated as a misconfiguration and blocks startup so the gate can never silently fail open. Optionally set `GateRequestContact` to an email address or URL; a denied user then gets a **Request Access** button that opens it (a bare email becomes a pre-filled `mailto:`).
+
+Once configured, users outside the group see a friendly Access Denied dialog (with the Request Access button when a contact is set) and the tool exits; cancelling the sign-in also exits.
+
 ## Usage
 
 See [USAGE.md](USAGE.md) for day-to-day usage instructions and known behaviors.
@@ -87,7 +106,6 @@ See [USAGE.md](USAGE.md) for day-to-day usage instructions and known behaviors.
 
 - **Critical site flagging** — designate sensitive sites in config so they render with a red background in the site access grid as a visual warning
 - **Per-client build config** — bake a locked admin URL, critical site list, and feature flags into each compiled exe at build time so a client's exe can't be pointed at the wrong tenant
-- **User auth gate** — MSAL interactive login on launch with M365 security group membership check, preventing unauthorized use if the exe reaches the wrong hands; group ID baked in per-client at build time
 
 ## Code Signing
 
