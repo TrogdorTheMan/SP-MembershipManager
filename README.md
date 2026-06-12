@@ -100,4 +100,4 @@ Until signing is in place, Windows Defender may flag the executable as a false p
 
 ## License
 
-MIT. See [LICENSE](LICENSE).
+GPLv3. See [LICENSE](LICENSE).
