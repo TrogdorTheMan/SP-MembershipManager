@@ -1650,6 +1650,8 @@ function Show-MainForm {
                 "Add $($script:SelectedUser.DisplayName) to $($site.Title) as $($role)?",
                 "Confirm", 'YesNo', 'Warning')
             if ($conf -ne 'Yes') { return }
+            $btnAdd.Enabled    = $false
+            $btnRemove.Enabled = $false
             & $SetStatus "Adding $($script:SelectedUser.DisplayName) to $($site.Title) as $role..."
             try {
                 Add-UserToSite -SiteUrl $site.Url -UserEmail $script:SelectedUser.Email -Role $role
@@ -1661,6 +1663,7 @@ function Show-MainForm {
             } catch {
                 & $SetStatus "Failed to add user: $_"
                 [System.Windows.Forms.MessageBox]::Show($_.ToString(), "Error", 'OK', 'Error') | Out-Null
+                & $SetControlsBusy $false
             }
         }
     })
@@ -1680,6 +1683,8 @@ function Show-MainForm {
             "Remove $($script:SelectedUser.DisplayName)'s direct $($mem.DirectRole) access from $($mem.SiteName)?$remainingNote",
             "Confirm", 'YesNo', 'Warning')
         if ($conf -ne 'Yes') { return }
+        $btnAdd.Enabled    = $false
+        $btnRemove.Enabled = $false
 
         & $SetStatus "Removing $($script:SelectedUser.DisplayName) from $($mem.SiteName)..."
         $removeError = $null
@@ -1691,6 +1696,7 @@ function Show-MainForm {
         if ($removeError) {
             & $SetStatus "Failed to remove user: $removeError"
             [System.Windows.Forms.MessageBox]::Show($removeError.ToString(), "Error", 'OK', 'Error') | Out-Null
+            & $SetControlsBusy $false
         } else {
             & $SetStatus "Removed $($script:SelectedUser.DisplayName) from $($mem.SiteName). Use Refresh to verify."
             Show-CountdownDialog `
