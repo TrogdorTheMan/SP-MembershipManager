@@ -1657,6 +1657,7 @@ function Show-MainForm {
                 Show-CountdownDialog `
                     -Message "$($script:SelectedUser.DisplayName) was added to $($site.Title) as $role.`n`nSharePoint needs a moment to propagate the change. Wait for the countdown before refreshing." `
                     -Title 'Success'
+                $btnRefreshSites.PerformClick()
             } catch {
                 & $SetStatus "Failed to add user: $_"
                 [System.Windows.Forms.MessageBox]::Show($_.ToString(), "Error", 'OK', 'Error') | Out-Null
@@ -1695,6 +1696,7 @@ function Show-MainForm {
             Show-CountdownDialog `
                 -Message "$($script:SelectedUser.DisplayName)'s direct $($mem.DirectRole) access was removed from $($mem.SiteName).`n`nSharePoint needs a moment to propagate the change. Wait for the countdown before refreshing." `
                 -Title 'Success'
+                $btnRefreshSites.PerformClick()
         }
     })
 
