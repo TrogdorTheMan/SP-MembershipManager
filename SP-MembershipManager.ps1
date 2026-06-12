@@ -611,6 +611,7 @@ function Show-ConsentDialog {
         $btnOk.Location   = New-Object System.Drawing.Point(($textX + $contentW - $btnOk.Width), $btnY)
         $btnCopy.Location = New-Object System.Drawing.Point(($btnOk.Left - $btnCopy.Width - $gap), $btnY)
         $dlg.ClientSize   = New-Object System.Drawing.Size(($textX + $contentW + $margin), ($btnY + $btnOk.Height + $margin))
+        Start-Process $ConsentUrl
     })
 
     [void]$dlg.ShowDialog()
@@ -1634,8 +1635,8 @@ function Show-MainForm {
                 $errText = Get-FullExceptionText $_
                 $consentMsg = Get-ConsentErrorMessage -ErrorText $errText
                 if ($consentMsg) {
-                    & $SetStatus "Connection failed: admin consent required."
                     Show-ConsentDialog -ConsentUrl $consentMsg
+                    $form.Close()
                 } else {
                     & $SetStatus "Connection failed: $errText"
                     [System.Windows.Forms.MessageBox]::Show("Could not connect:`n$errText", "Error", 'OK', 'Error') | Out-Null
