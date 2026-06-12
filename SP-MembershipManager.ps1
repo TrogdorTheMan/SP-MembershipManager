@@ -262,10 +262,25 @@ function Get-IdTokenClaims {
     }
 }
 
+function Get-TenantFromAdminUrl {
+    # Derives a login authority hint from a SharePoint admin URL.
+    # e.g. https://contoso-admin.sharepoint.com -> contoso.onmicrosoft.com
+    # Returns empty string if the URL does not match the expected pattern.
+    param([string]$AdminUrl)
+    try {
+        $h = ([Uri]$AdminUrl).Host
+        if ($h -match '^(.+)-admin\.sharepoint\.com$') {
+            return "$($Matches[1]).onmicrosoft.com"
+        }
+    } catch {}
+    return ''
+}
+
 function Invoke-AuthGate {
     # Interactive sign-in + security-group authorization check.
     # Returns @{ Authorized=[bool]; Cancelled=[bool]; Upn=[string]; Reason=[string] }.
     # When the gate is not configured it is skipped and reports Authorized=$true.
+    param([string]$TenantHint = '')
     if (-not $script:GateClientId -or -not $script:GateGroupId) {
         Write-Log "Auth gate not configured (GateClientId/GateGroupId empty) -- skipping." | Out-Null
         return @{ Authorized = $true; Cancelled = $false; Upn = ''; Reason = 'gate-disabled' }
@@ -291,9 +306,13 @@ function Invoke-AuthGate {
 
     # Build a public client; no token cache so each launch is a fresh sign-in
     # and SelectAccount forces the account prompt every time.
+    $authority = $script:GateAuthority
+    if ($TenantHint -and $authority -eq 'https://login.microsoftonline.com/organizations') {
+        $authority = "https://login.microsoftonline.com/$TenantHint"
+    }
     try {
         $app = [Microsoft.Identity.Client.PublicClientApplicationBuilder]::Create($script:GateClientId).
-            WithAuthority($script:GateAuthority).
+            WithAuthority($authority).
             WithRedirectUri("http://localhost").
             Build()
     } catch {
@@ -1696,17 +1715,17 @@ Add-Type -AssemblyName System.Windows.Forms
 
 Load-AppConfig
 
+$adminUrl = Show-AdminUrlDialog
+if (-not $adminUrl) { exit }
+
 # Authorization gate: the user signs in interactively and must be a member of the
 # approved security group. This runs before any cert connection, so an
 # unauthorized user never reaches the privileged app-only SharePoint session.
-$gate = Invoke-AuthGate
+$gate = Invoke-AuthGate -TenantHint (Get-TenantFromAdminUrl -AdminUrl $adminUrl)
 if (-not $gate.Authorized) {
     if (-not $gate.Cancelled) { Show-AccessDeniedDialog -Upn $gate.Upn -Reason $gate.Reason }
     exit
 }
-
-$adminUrl = Show-AdminUrlDialog
-if (-not $adminUrl) { exit }
 
 try {
     $sites = Show-LoadingForm -AdminUrl $adminUrl
