@@ -322,10 +322,84 @@ function Invoke-AuthGate {
 
     # openid + profile yield an id_token containing the groups claim; no Graph scope.
     $scopes = [string[]]@('openid', 'profile')
+    $webViewOptions = New-Object Microsoft.Identity.Client.SystemWebViewOptions
+    $webViewOptions.HtmlMessageSuccess = @"
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Signed In — SP Membership Manager</title>
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+      background: #f3f4f6;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      min-height: 100vh;
+      padding: 2rem;
+    }
+    .card {
+      background: #fff;
+      border-radius: 12px;
+      box-shadow: 0 2px 16px rgba(0,0,0,0.08);
+      max-width: 480px;
+      width: 100%;
+      padding: 2.5rem 2rem;
+      text-align: center;
+    }
+    .icon {
+      width: 56px;
+      height: 56px;
+      background: #e8f5e9;
+      border-radius: 50%;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      margin: 0 auto 1.25rem;
+    }
+    .icon svg {
+      width: 28px;
+      height: 28px;
+      stroke: #2e7d32;
+      fill: none;
+      stroke-width: 2.5;
+      stroke-linecap: round;
+      stroke-linejoin: round;
+    }
+    h1 { font-size: 1.35rem; font-weight: 600; color: #111827; margin-bottom: 0.6rem; }
+    p { font-size: 0.95rem; color: #6b7280; line-height: 1.6; margin-bottom: 0.5rem; }
+    .divider { border: none; border-top: 1px solid #e5e7eb; margin: 1.5rem 0; }
+    .footer { font-size: 0.8rem; color: #9ca3af; }
+    .footer a { color: #6b7280; text-decoration: none; }
+    .footer a:hover { text-decoration: underline; }
+  </style>
+</head>
+<body>
+  <div class="card">
+    <div class="icon">
+      <svg viewBox="0 0 24 24"><polyline points="20 6 9 17 4 12"/></svg>
+    </div>
+    <h1>Sign-in successful</h1>
+    <p>You've been verified as an authorized user. You can close this tab.</p>
+    <p>Return to SP Membership Manager to continue.</p>
+    <hr class="divider">
+    <p class="footer">
+      &copy; 2026 Cory Francis &nbsp;&middot;&nbsp;
+      <a href="https://github.com/TrogdorTheMan/SP-MembershipManager">SP-MembershipManager</a>
+      &nbsp;&middot;&nbsp; MIT License
+    </p>
+  </div>
+</body>
+</html>
+"@
     try {
         $result = $app.AcquireTokenInteractive($scopes).
             WithPrompt([Microsoft.Identity.Client.Prompt]::SelectAccount).
             WithUseEmbeddedWebView($false).
+            WithSystemWebViewOptions($webViewOptions).
             ExecuteAsync().GetAwaiter().GetResult()
     } catch [Microsoft.Identity.Client.MsalClientException] {
         # e.g. authentication_canceled -- the user closed the browser.
