@@ -2,5 +2,8 @@
   "CertificatePath": ".\\sp-mm.pfx",
   "CertificatePassword": "YOUR_CERT_PASSWORD_HERE",
   "CertificatePasswordEncrypted": false,
-  "Tenant": "yourtenant.onmicrosoft.com"
+  "Tenant": "yourtenant.onmicrosoft.com",
+  "GateClientId": "",
+  "GateGroupId": "",
+  "GateRequestContact": ""
 }

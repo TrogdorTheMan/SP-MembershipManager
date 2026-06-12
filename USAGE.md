@@ -5,10 +5,11 @@ This guide covers day-to-day usage and known behaviors to be aware of when manag
 ## Basic Workflow
 
 1. Launch `SP-MembershipManager.exe`
-2. Enter your SharePoint Admin URL (e.g. `https://yourtenant-admin.sharepoint.com`) and click **Connect**
-3. Search for an employee by name or email in the left panel
-4. Select them from the results list — the tool will scan all sites and show every site they have access to and what role they hold
-5. Use **Add to Site** or **Remove from Site** to make changes
+2. If the sign-in gate is enabled, a browser window opens for you to sign in. You must be a member of the approved security group to continue; if you are not, the tool shows an Access Denied message and closes. You sign in each time you launch the tool.
+3. Enter your SharePoint Admin URL (e.g. `https://yourtenant-admin.sharepoint.com`) and click **Connect**
+4. Search for an employee by name or email in the left panel
+5. Select them from the results list — the tool will scan all sites and show every site they have access to and what role they hold
+6. Use **Add to Site** or **Remove from Site** to make changes
 
 ## Known Behaviors
 
