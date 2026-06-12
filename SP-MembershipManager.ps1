@@ -408,11 +408,7 @@ function Invoke-AuthGate {
     } catch {
         Write-Log "Auth gate: sign-in failed - $_" | Out-Null
         $consentUrl = Get-ConsentErrorMessage -ErrorText $_.ToString() -ClientId $script:GateClientId
-        if ($consentUrl) {
-            Show-ConsentDialog -ConsentUrl $consentUrl
-            $certConsentUrl = Get-ConsentErrorMessage -ErrorText 'AADSTS65001' -ClientId $script:AppClientId
-            Show-ConsentDialog -ConsentUrl $certConsentUrl
-        }
+        if ($consentUrl) { Show-ConsentDialog -ConsentUrl $consentUrl }
         return @{ Authorized = $false; Cancelled = $false; Upn = ''; Reason = "signin: $($_.Exception.Message)" }
     }
 
@@ -618,6 +614,34 @@ function Show-ConsentDialog {
     })
 
     [void]$dlg.ShowDialog()
+}
+
+# Pre-flight check: acquire a token via MSAL certificate credentials before PnP
+# connects. MSAL surfaces real AADSTS errors; PnP swallows them into a generic
+# exception. Returns a consent URL if consent is missing, or $null if OK.
+function Test-CertAppConsent {
+    param([string]$TenantName)
+    try {
+        if (-not ([System.Management.Automation.PSTypeName]'Microsoft.Identity.Client.ConfidentialClientApplicationBuilder').Type) {
+            $pnpMod = Get-Module PnP.PowerShell
+            if ($pnpMod) {
+                $msalDll = Join-Path (Split-Path $pnpMod.Path) 'Core\Microsoft.Identity.Client.dll'
+                if (Test-Path $msalDll) { Add-Type -Path $msalDll }
+            }
+        }
+        $cert = New-Object System.Security.Cryptography.X509Certificates.X509Certificate2(
+            $script:CertPath, $script:CertPasswordPlain,
+            [System.Security.Cryptography.X509Certificates.X509KeyStorageFlags]::DefaultKeySet)
+        $app = [Microsoft.Identity.Client.ConfidentialClientApplicationBuilder]::Create($script:AppClientId).
+            WithCertificate($cert).
+            WithAuthority("https://login.microsoftonline.com/$TenantName").
+            Build()
+        $scopes = [string[]]@("https://graph.microsoft.com/.default")
+        [void]$app.AcquireTokenForClient($scopes).ExecuteAsync().GetAwaiter().GetResult()
+        return $null
+    } catch {
+        return Get-ConsentErrorMessage -ErrorText $_.ToString() -ClientId $script:AppClientId
+    }
 }
 
 # ---------------------------------------------------------------------------
@@ -1869,6 +1893,12 @@ if (-not $adminUrl) { exit }
 $gate = Invoke-AuthGate -TenantHint (Get-TenantFromAdminUrl -AdminUrl $adminUrl)
 if (-not $gate.Authorized) {
     if (-not $gate.Cancelled) { Show-AccessDeniedDialog -Upn $gate.Upn -Reason $gate.Reason }
+    exit
+}
+
+$certConsentUrl = Test-CertAppConsent -TenantName $script:TenantName
+if ($certConsentUrl) {
+    Show-ConsentDialog -ConsentUrl $certConsentUrl
     exit
 }
 
