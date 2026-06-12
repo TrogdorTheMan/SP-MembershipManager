@@ -625,11 +625,8 @@ function Show-ConsentDialog {
 function Get-FullExceptionText {
     param($Err)
     $parts = @($Err.ToString())
-    $inner = if ($Err.Exception) { $Err.Exception.InnerException } else { $null }
-    while ($inner) {
-        $parts += $inner.Message
-        $inner = $inner.InnerException
-    }
+    if ($Err.Exception) { $parts += $Err.Exception.ToString() }
+    if ($Err.ErrorDetails) { $parts += $Err.ErrorDetails.ToString() }
     return $parts -join ' | '
 }
 
