@@ -620,7 +620,7 @@ function Show-ConsentDialog {
 # connects. MSAL surfaces real AADSTS errors; PnP swallows them into a generic
 # exception. Returns a consent URL if consent is missing, or $null if OK.
 function Test-CertAppConsent {
-    param([string]$TenantName)
+    param([string]$TenantName, [string]$AdminUrl)
     try {
         if (-not ([System.Management.Automation.PSTypeName]'Microsoft.Identity.Client.ConfidentialClientApplicationBuilder').Type) {
             $pnpMod = Get-Module PnP.PowerShell
@@ -630,13 +630,14 @@ function Test-CertAppConsent {
             }
         }
         $cert = New-Object System.Security.Cryptography.X509Certificates.X509Certificate2(
-            $script:CertPath, $script:CertPasswordPlain,
-            [System.Security.Cryptography.X509Certificates.X509KeyStorageFlags]::DefaultKeySet)
+            $script:CertPath, $script:CertPasswordPlain)
         $app = [Microsoft.Identity.Client.ConfidentialClientApplicationBuilder]::Create($script:AppClientId).
             WithCertificate($cert).
             WithAuthority("https://login.microsoftonline.com/$TenantName").
             Build()
-        $scopes = [string[]]@("https://graph.microsoft.com/.default")
+        # Derive the SharePoint root URL from the admin URL to use the correct scope
+        $spRoot = $AdminUrl -replace '-admin\.sharepoint\.com.*$', '.sharepoint.com'
+        $scopes = [string[]]@("$spRoot/.default")
         [void]$app.AcquireTokenForClient($scopes).ExecuteAsync().GetAwaiter().GetResult()
         return $null
     } catch {
@@ -1896,7 +1897,7 @@ if (-not $gate.Authorized) {
     exit
 }
 
-$certConsentUrl = Test-CertAppConsent -TenantName $script:TenantName
+$certConsentUrl = Test-CertAppConsent -TenantName $script:TenantName -AdminUrl $adminUrl
 if ($certConsentUrl) {
     Show-ConsentDialog -ConsentUrl $certConsentUrl
     exit
