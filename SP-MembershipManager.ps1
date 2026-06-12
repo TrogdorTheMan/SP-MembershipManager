@@ -1628,9 +1628,16 @@ function Show-MainForm {
         $dlgForm.StartPosition = 'CenterParent'
         $dlgForm.MaximizeBox = $false; $dlgForm.MinimizeBox = $false
 
+        $existingUrls   = $script:Memberships | ForEach-Object { $_.SiteUrl }
+        $availableSites = @($script:AllSites | Where-Object { $_.Url -notin $existingUrls })
+        if ($availableSites.Count -eq 0) {
+            [System.Windows.Forms.MessageBox]::Show("$($script:SelectedUser.DisplayName) already has access to all sites.", "Nothing to Add", 'OK', 'Information') | Out-Null
+            return
+        }
+
         $lblS = New-Object System.Windows.Forms.Label; $lblS.Text = "Site:"; $lblS.Location = New-Object System.Drawing.Point(12,16); $lblS.AutoSize = $true
         $cmbS = New-Object System.Windows.Forms.ComboBox; $cmbS.Location = New-Object System.Drawing.Point(80,12); $cmbS.Size = New-Object System.Drawing.Size(310,23); $cmbS.DropDownStyle = 'DropDownList'
-        foreach ($s in $script:AllSites) { [void]$cmbS.Items.Add($s.Title) }
+        foreach ($s in $availableSites) { [void]$cmbS.Items.Add($s.Title) }
         if ($cmbS.Items.Count -gt 0) { $cmbS.SelectedIndex = 0 }
 
         $lblR = New-Object System.Windows.Forms.Label; $lblR.Text = "Role:"; $lblR.Location = New-Object System.Drawing.Point(12,52); $lblR.AutoSize = $true
@@ -1644,14 +1651,13 @@ function Show-MainForm {
 
    
         if ($dlgForm.ShowDialog() -eq 'OK') {
-            $site = $script:AllSites[$cmbS.SelectedIndex]
+            $site = $availableSites[$cmbS.SelectedIndex]
             $role = $cmbR.SelectedItem
             $conf = [System.Windows.Forms.MessageBox]::Show(
                 "Add $($script:SelectedUser.DisplayName) to $($site.Title) as $($role)?",
                 "Confirm", 'YesNo', 'Warning')
             if ($conf -ne 'Yes') { return }
-            $btnAdd.Enabled    = $false
-            $btnRemove.Enabled = $false
+            & $SetControlsBusy $true
             & $SetStatus "Adding $($script:SelectedUser.DisplayName) to $($site.Title) as $role..."
             try {
                 Add-UserToSite -SiteUrl $site.Url -UserEmail $script:SelectedUser.Email -Role $role
@@ -1683,8 +1689,7 @@ function Show-MainForm {
             "Remove $($script:SelectedUser.DisplayName)'s direct $($mem.DirectRole) access from $($mem.SiteName)?$remainingNote",
             "Confirm", 'YesNo', 'Warning')
         if ($conf -ne 'Yes') { return }
-        $btnAdd.Enabled    = $false
-        $btnRemove.Enabled = $false
+        & $SetControlsBusy $true
 
         & $SetStatus "Removing $($script:SelectedUser.DisplayName) from $($mem.SiteName)..."
         $removeError = $null
