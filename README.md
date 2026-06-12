@@ -1,5 +1,10 @@
 # SP-MembershipManager
 
+> [!WARNING]
+> **Known issue — first-time deployment on a new tenant**
+>
+> If admin consent has not yet been granted for the tenant you're deploying to, the tool will fail on the first launch with a connection error. Grant consent when prompted, then **relaunch the tool** — it will work correctly on the second run. This is a workflow handling bug actively being worked on. See the [Deploying to a new tenant](#deploying-to-a-new-tenant) section for the full first-run steps.
+
 A Windows GUI tool that lets authorized users manage SharePoint Online site membership without needing SharePoint admin training. Point it at any Microsoft 365 tenant and it handles the rest.
 
 ## What it does
@@ -104,8 +109,10 @@ See [USAGE.md](USAGE.md) for day-to-day usage instructions and known behaviors.
 
 ## Roadmap
 
+- **First-run consent flow** *(in progress)* — the tool already detects missing admin consent and shows a guided dialog; auto-relaunch after consent is being stabilized
 - **Critical site flagging** — designate sensitive sites in config so they render with a red background in the site access grid as a visual warning
 - **Per-client build config** — bake a locked admin URL, critical site list, and feature flags into each compiled exe at build time so a client's exe can't be pointed at the wrong tenant
+- **Admin URL validation** — clicking Continue on the admin URL prompt with no input currently closes the app silently; will show a validation message instead
 
 ## Code Signing
 
