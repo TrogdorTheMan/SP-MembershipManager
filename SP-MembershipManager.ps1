@@ -407,6 +407,8 @@ function Invoke-AuthGate {
         return @{ Authorized = $false; Cancelled = $true; Upn = ''; Reason = "cancelled: $($_.Exception.Message)" }
     } catch {
         Write-Log "Auth gate: sign-in failed - $_" | Out-Null
+        $consentUrl = Get-ConsentErrorMessage -ErrorText $_.ToString() -ClientId $script:GateClientId
+        if ($consentUrl) { Show-ConsentDialog -ConsentUrl $consentUrl }
         return @{ Authorized = $false; Cancelled = $false; Upn = ''; Reason = "signin: $($_.Exception.Message)" }
     }
 
@@ -621,7 +623,7 @@ function Show-ConsentDialog {
 # Returns a friendly consent error message if the error string looks like a
 # missing admin consent failure, or $null if it's an unrelated error.
 function Get-ConsentErrorMessage {
-    param([string]$ErrorText)
+    param([string]$ErrorText, [string]$ClientId = $script:AppClientId)
     $consentPatterns = @(
         'AADSTS65001',          # user/admin has not consented
         'AADSTS700016',         # app not found in tenant
@@ -635,7 +637,7 @@ function Get-ConsentErrorMessage {
     if (-not $isConsentError) { return $null }
 
     return ("https://login.microsoftonline.com/common/adminconsent" +
-            "?client_id=$script:AppClientId" +
+            "?client_id=$ClientId" +
             "&redirect_uri=https://trogdortheman.github.io/SP-MembershipManager/consent-complete.html")
 }
 
