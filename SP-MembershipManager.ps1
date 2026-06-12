@@ -42,6 +42,15 @@ function Ensure-PnPModule {
 $script:LogDir  = "C:\temp\SP-MembershipManager\Logs"
 $script:LogFile = Join-Path $script:LogDir "log_$(Get-Date -Format 'yyyy-MM-dd').txt"
 
+function Restart-App {
+    $exe = [System.Diagnostics.Process]::GetCurrentProcess().MainModule.FileName
+    if ($PSCommandPath -and ($exe -match 'pwsh\.exe$|powershell\.exe$')) {
+        Start-Process $exe -ArgumentList "-File", "`"$PSCommandPath`""
+    } else {
+        Start-Process $exe
+    }
+}
+
 function Write-Log {
     param([string]$Message)
     $line = "[$(Get-Date -Format 'HH:mm:ss')] $Message"
@@ -1636,7 +1645,7 @@ function Show-MainForm {
                 $consentMsg = Get-ConsentErrorMessage -ErrorText $errText
                 if ($consentMsg) {
                     Show-ConsentDialog -ConsentUrl $consentMsg
-                    Start-Process ([System.Diagnostics.Process]::GetCurrentProcess().MainModule.FileName)
+                    Restart-App
                     $form.Close()
                 } else {
                     & $SetStatus "Connection failed: $errText"
