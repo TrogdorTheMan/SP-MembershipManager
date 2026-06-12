@@ -109,7 +109,7 @@ See [USAGE.md](USAGE.md) for day-to-day usage instructions and known behaviors.
 
 ## Code Signing
 
-An application for free code signing through the [SignPath Foundation](https://signpath.org) open source program was submitted on 2026-06-09 and is pending review. Once approved, releases will be signed.
+An application for free code signing through the [SignPath Foundation](https://signpath.org) open source program was submitted on 2026-06-09 and is pending review. If approved, releases will be signed. If not, we'll figure out next steps.
 
 Until signing is in place, Windows Defender may flag the executable as a false positive. This is a known issue with executables that embed and run scripts. To work around it, add a Defender exclusion for the exe after downloading:
 
