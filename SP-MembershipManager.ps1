@@ -620,6 +620,19 @@ function Show-ConsentDialog {
 # SharePoint operations
 # ---------------------------------------------------------------------------
 
+# Unwraps the full exception chain into a single string so consent pattern
+# matching works even when PnP wraps the real AADSTS error in a generic exception.
+function Get-FullExceptionText {
+    param($Err)
+    $parts = @($Err.ToString())
+    $inner = if ($Err.Exception) { $Err.Exception.InnerException } else { $null }
+    while ($inner) {
+        $parts += $inner.Message
+        $inner = $inner.InnerException
+    }
+    return $parts -join ' | '
+}
+
 # Returns a friendly consent error message if the error string looks like a
 # missing admin consent failure, or $null if it's an unrelated error.
 function Get-ConsentErrorMessage {
@@ -1590,7 +1603,7 @@ function Show-MainForm {
                 & $SetStatus "Ready. Search for an employee to manage their site access."
                 $btnAdd.Enabled = $false
             } catch {
-                $errText = $_.ToString()
+                $errText = Get-FullExceptionText $_
                 $consentMsg = Get-ConsentErrorMessage -ErrorText $errText
                 if ($consentMsg) {
                     & $SetStatus "Connection failed: admin consent required."
@@ -1862,7 +1875,7 @@ try {
     $sites = Show-LoadingForm -AdminUrl $adminUrl
     Show-MainForm -AdminUrl $adminUrl -PreloadedSites $sites
 } catch {
-    $errText = $_.ToString()
+    $errText = Get-FullExceptionText $_
     $consentMsg = Get-ConsentErrorMessage -ErrorText $errText
     if ($consentMsg) {
         Show-ConsentDialog -ConsentUrl $consentMsg
