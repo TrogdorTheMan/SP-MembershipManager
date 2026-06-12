@@ -641,6 +641,7 @@ function Test-CertAppConsent {
         [void]$app.AcquireTokenForClient($scopes).ExecuteAsync().GetAwaiter().GetResult()
         return $null
     } catch {
+        Write-Log "Test-CertAppConsent error: $($_.ToString())" | Out-Null
         return Get-ConsentErrorMessage -ErrorText $_.ToString() -ClientId $script:AppClientId
     }
 }
@@ -670,7 +671,8 @@ function Get-ConsentErrorMessage {
         'unauthorized_client',  # app not authorized for this tenant
         'access_denied',        # admin consent required
         'InvalidClientId',      # client ID not recognized in tenant
-        'missing service principal' # belt-and-suspenders text match for the above
+        'missing service principal', # belt-and-suspenders text match for the above
+        'General exception while processing' # PnP swallows AADSTS into this during initial cert connection when service principal is missing
     )
     $isConsentError = $consentPatterns | Where-Object { $ErrorText -match $_ }
     if (-not $isConsentError) { return $null }
