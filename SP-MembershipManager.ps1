@@ -1636,6 +1636,7 @@ function Show-MainForm {
                 $consentMsg = Get-ConsentErrorMessage -ErrorText $errText
                 if ($consentMsg) {
                     Show-ConsentDialog -ConsentUrl $consentMsg
+                    Start-Process ([System.Diagnostics.Process]::GetCurrentProcess().MainModule.FileName)
                     $form.Close()
                 } else {
                     & $SetStatus "Connection failed: $errText"
@@ -1903,6 +1904,7 @@ if (-not $gate.Authorized) {
 $certConsentUrl = Test-CertAppConsent -TenantName $script:TenantName -AdminUrl $adminUrl
 if ($certConsentUrl) {
     Show-ConsentDialog -ConsentUrl $certConsentUrl
+    Start-Process ([System.Diagnostics.Process]::GetCurrentProcess().MainModule.FileName)
     exit
 }
 
