@@ -45,7 +45,9 @@ $script:LogFile = Join-Path $script:LogDir "log_$(Get-Date -Format 'yyyy-MM-dd')
 function Restart-App {
     $exe = [System.Diagnostics.Process]::GetCurrentProcess().MainModule.FileName
     if ($PSCommandPath -and ($exe -match 'pwsh\.exe$|powershell\.exe$')) {
-        Start-Process $exe -ArgumentList "-File", "`"$PSCommandPath`""
+        $argList = @("-NonInteractive", "-File", "`"$PSCommandPath`"")
+        if ($LauncherDir) { $argList += @("-LauncherDir", "`"$LauncherDir`"") }
+        Start-Process $exe -ArgumentList $argList
     } else {
         Start-Process $exe
     }
@@ -587,7 +589,7 @@ function Show-ConsentDialog {
     $font = New-Object System.Drawing.Font('Segoe UI', 9)
 
     $lblMsg = New-Object System.Windows.Forms.Label
-    $lblMsg.Text      = "Admin consent has not been granted for this tenant.`n`nA Global Administrator needs to visit the link below and sign in to grant access. This is a one-time step. Once consent is granted, relaunch the tool."
+    $lblMsg.Text      = "A browser tab has opened automatically to request admin consent for this tenant.`n`nA Global Administrator needs to sign in and approve — this is a one-time step. Once they've approved, click Relaunch below.`n`nIf you're not an administrator, contact your IT team to request access."
     $lblMsg.Location  = New-Object System.Drawing.Point($textX, $margin)
     $lblMsg.MaximumSize = New-Object System.Drawing.Size($contentW, 0)
     $lblMsg.AutoSize  = $true
@@ -609,20 +611,21 @@ function Show-ConsentDialog {
         $btnCopy.Text = "Copied!"
     })
 
-    $btnOk = New-Object System.Windows.Forms.Button
-    $btnOk.Text         = "OK"
-    $btnOk.Size         = New-Object System.Drawing.Size(75, 28)
-    $btnOk.DialogResult = 'OK'
-    $dlg.AcceptButton   = $btnOk
+    $btnRelaunch = New-Object System.Windows.Forms.Button
+    $btnRelaunch.Text         = "Relaunch"
+    $btnRelaunch.Size         = New-Object System.Drawing.Size(85, 28)
+    $btnRelaunch.DialogResult = 'OK'
+    $btnRelaunch.Add_Click({ Restart-App })
+    $dlg.AcceptButton         = $btnRelaunch
 
-    $dlg.Controls.AddRange(@($icon, $lblMsg, $link, $btnCopy, $btnOk))
+    $dlg.Controls.AddRange(@($icon, $lblMsg, $link, $btnCopy, $btnRelaunch))
 
     # Position buttons after controls are added so we know the link's final height
     $dlg.Add_Shown({
         $btnY = $link.Bottom + $gap
-        $btnOk.Location   = New-Object System.Drawing.Point(($textX + $contentW - $btnOk.Width), $btnY)
-        $btnCopy.Location = New-Object System.Drawing.Point(($btnOk.Left - $btnCopy.Width - $gap), $btnY)
-        $dlg.ClientSize   = New-Object System.Drawing.Size(($textX + $contentW + $margin), ($btnY + $btnOk.Height + $margin))
+        $btnRelaunch.Location = New-Object System.Drawing.Point(($textX + $contentW - $btnRelaunch.Width), $btnY)
+        $btnCopy.Location     = New-Object System.Drawing.Point(($btnRelaunch.Left - $btnCopy.Width - $gap), $btnY)
+        $dlg.ClientSize       = New-Object System.Drawing.Size(($textX + $contentW + $margin), ($btnY + $btnRelaunch.Height + $margin))
         Start-Process $ConsentUrl
     })
 
@@ -1909,9 +1912,7 @@ if (-not $adminUrl) { exit }
 # unauthorized user never reaches the privileged app-only SharePoint session.
 $gate = Invoke-AuthGate -TenantHint (Get-TenantFromAdminUrl -AdminUrl $adminUrl)
 if (-not $gate.Authorized) {
-    if ($gate.ConsentShown) {
-        Start-Process ([System.Diagnostics.Process]::GetCurrentProcess().MainModule.FileName)
-    } elseif (-not $gate.Cancelled) {
+    if (-not $gate.Cancelled -and -not $gate.ConsentShown) {
         Show-AccessDeniedDialog -Upn $gate.Upn -Reason $gate.Reason
     }
     exit
@@ -1920,7 +1921,6 @@ if (-not $gate.Authorized) {
 $certConsentUrl = Test-CertAppConsent -TenantName $script:TenantName -AdminUrl $adminUrl
 if ($certConsentUrl) {
     Show-ConsentDialog -ConsentUrl $certConsentUrl
-    Start-Process ([System.Diagnostics.Process]::GetCurrentProcess().MainModule.FileName)
     exit
 }
 
@@ -1932,7 +1932,6 @@ try {
     $consentMsg = Get-ConsentErrorMessage -ErrorText $errText
     if ($consentMsg) {
         Show-ConsentDialog -ConsentUrl $consentMsg
-        Start-Process ([System.Diagnostics.Process]::GetCurrentProcess().MainModule.FileName)
     } else {
         [System.Windows.Forms.MessageBox]::Show(
             "Could not connect to tenant:`n$errText",
