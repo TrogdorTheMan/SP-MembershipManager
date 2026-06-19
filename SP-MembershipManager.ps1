@@ -20,7 +20,13 @@ param(
     [string]$LauncherDir = '',
     # Passed by the C# launcher so Restart-App can relaunch the exe directly
     # rather than relaunching pwsh against the temp PS1 (which may be deleted).
-    [string]$LauncherExe = ''
+    [string]$LauncherExe = '',
+    # Passed by the C# launcher when a per-client client-config.json was baked
+    # into the EXE at build time (by build.ps1). Overrides app-config.json values.
+    [string]$ClientConfig = '',
+    # Passed by the C# launcher when a certificate PFX was baked into the EXE
+    # at build time. Path to the temp-extracted PFX file.
+    [string]$EmbeddedCert = ''
 )
 
 Set-StrictMode -Version Latest
@@ -124,6 +130,13 @@ $script:GateRequestContact = ""
 # home tenant; the groups claim reflects that tenant's directory.
 $script:GateAuthority     = "https://login.microsoftonline.com/organizations"
 
+# Per-client build config (#17). Populated by Load-ClientConfig when a client-config.json
+# was baked into the EXE at build time. Empty/defaults mean feature is not active.
+$script:LockedAdminUrl         = ''
+$script:CriticalSiteUrls       = @()
+$script:CriticalSiteGroupId    = ''
+$script:CanManageCriticalSites = $true
+
 # When running via the C# launcher, $LauncherDir is the exe's directory.
 # When running directly as a .ps1, use $PSScriptRoot.
 $script:ScriptRoot = if ($LauncherDir) {
@@ -138,88 +151,83 @@ $script:ConfigFile  = Join-Path $script:ScriptRoot "app-config.json"
 $script:LastUrlFile = Join-Path $script:ScriptRoot "last-url.txt"
 
 function Load-AppConfig {
+    # $SkipCertValidation is set when the cert is embedded in the EXE via build.ps1;
+    # in that case app-config.json is optional and cert/tenant fields are ignored.
+    param([bool]$SkipCertValidation = $false)
+
     if (-not (Test-Path $script:ConfigFile)) {
+        if ($SkipCertValidation) { return }   # embedded cert; app-config.json not required
         [System.Windows.Forms.MessageBox]::Show(
             "app-config.json not found next to the script.`n`nSee app-config.example.json for the required format.",
             "Configuration Missing", 'OK', 'Error') | Out-Null
         exit
     }
     $cfg = Get-Content $script:ConfigFile -Raw | ConvertFrom-Json
-    if (-not $cfg.CertificatePath -or -not $cfg.CertificatePassword) {
-        [System.Windows.Forms.MessageBox]::Show(
-            "app-config.json is missing CertificatePath or CertificatePassword.",
-            "Configuration Error", 'OK', 'Error') | Out-Null
-        exit
-    }
-    if (-not $cfg.Tenant) {
-        [System.Windows.Forms.MessageBox]::Show(
-            "app-config.json is missing Tenant (e.g. `"contoso.onmicrosoft.com`").",
-            "Configuration Error", 'OK', 'Error') | Out-Null
-        exit
-    }
-    $certPath = $cfg.CertificatePath
-    if (-not [System.IO.Path]::IsPathRooted($certPath)) {
-        $certPath = Join-Path $script:ScriptRoot $certPath
-    }
-    if (-not (Test-Path $certPath)) {
-        [System.Windows.Forms.MessageBox]::Show(
-            "Certificate file not found: $certPath",
-            "Configuration Error", 'OK', 'Error') | Out-Null
-        exit
-    }
-    $script:CertPath = $certPath
 
-    # DPAPI: if password is plaintext, encrypt it in place and save back to disk.
-    # On subsequent runs the encrypted blob is decrypted transparently.
-    # Encryption is CurrentUser-scoped -- tied to the Windows account that first ran the tool.
-    $isEncrypted = $cfg.PSObject.Properties.Item('CertificatePasswordEncrypted') -and
-                   $cfg.CertificatePasswordEncrypted -eq $true
-    if ($isEncrypted) {
-        try {
-            $plainPassword = Unprotect-String -Base64 $cfg.CertificatePassword
-        } catch {
+    if (-not $SkipCertValidation) {
+        if (-not $cfg.CertificatePath -or -not $cfg.CertificatePassword) {
             [System.Windows.Forms.MessageBox]::Show(
-                "Could not decrypt the certificate password in app-config.json.`n`n" +
-                "This usually means the config was created on a different machine or user account.`n`n" +
-                "Set CertificatePasswordEncrypted to false and restore the plaintext password, then re-run to re-encrypt for this account.",
-                "Decryption Failed", 'OK', 'Error') | Out-Null
+                "app-config.json is missing CertificatePath or CertificatePassword.",
+                "Configuration Error", 'OK', 'Error') | Out-Null
             exit
         }
-    } else {
-        $plainPassword = $cfg.CertificatePassword
-        $encrypted     = Protect-String -Plaintext $plainPassword
-        $cfg.CertificatePassword = $encrypted
-        if ($cfg.PSObject.Properties.Item('CertificatePasswordEncrypted')) {
-            $cfg.CertificatePasswordEncrypted = $true
-        } else {
-            $cfg | Add-Member -MemberType NoteProperty -Name 'CertificatePasswordEncrypted' -Value $true
+        if (-not $cfg.Tenant) {
+            [System.Windows.Forms.MessageBox]::Show(
+                "app-config.json is missing Tenant (e.g. `"contoso.onmicrosoft.com`").",
+                "Configuration Error", 'OK', 'Error') | Out-Null
+            exit
         }
-        $cfg | ConvertTo-Json | Set-Content $script:ConfigFile -Encoding UTF8
-        Write-Log "Certificate password encrypted with DPAPI and saved to app-config.json."
+        $certPath = $cfg.CertificatePath
+        if (-not [System.IO.Path]::IsPathRooted($certPath)) {
+            $certPath = Join-Path $script:ScriptRoot $certPath
+        }
+        if (-not (Test-Path $certPath)) {
+            [System.Windows.Forms.MessageBox]::Show(
+                "Certificate file not found: $certPath",
+                "Configuration Error", 'OK', 'Error') | Out-Null
+            exit
+        }
+        $script:CertPath = $certPath
+
+        # DPAPI: if password is plaintext, encrypt it in place and save back to disk.
+        # On subsequent runs the encrypted blob is decrypted transparently.
+        # Encryption is CurrentUser-scoped -- tied to the Windows account that first ran the tool.
+        $isEncrypted = $cfg.PSObject.Properties.Item('CertificatePasswordEncrypted') -and
+                       $cfg.CertificatePasswordEncrypted -eq $true
+        if ($isEncrypted) {
+            try {
+                $plainPassword = Unprotect-String -Base64 $cfg.CertificatePassword
+            } catch {
+                [System.Windows.Forms.MessageBox]::Show(
+                    "Could not decrypt the certificate password in app-config.json.`n`n" +
+                    "This usually means the config was created on a different machine or user account.`n`n" +
+                    "Set CertificatePasswordEncrypted to false and restore the plaintext password, then re-run to re-encrypt for this account.",
+                    "Decryption Failed", 'OK', 'Error') | Out-Null
+                exit
+            }
+        } else {
+            $plainPassword = $cfg.CertificatePassword
+            $encrypted     = Protect-String -Plaintext $plainPassword
+            $cfg.CertificatePassword = $encrypted
+            if ($cfg.PSObject.Properties.Item('CertificatePasswordEncrypted')) {
+                $cfg.CertificatePasswordEncrypted = $true
+            } else {
+                $cfg | Add-Member -MemberType NoteProperty -Name 'CertificatePasswordEncrypted' -Value $true
+            }
+            $cfg | ConvertTo-Json | Set-Content $script:ConfigFile -Encoding UTF8
+            Write-Log "Certificate password encrypted with DPAPI and saved to app-config.json."
+        }
+
+        $script:CertPasswordPlain = $plainPassword
+        $script:CertPassword      = ConvertTo-SecureString $plainPassword -AsPlainText -Force
+        $script:TenantName        = $cfg.Tenant
     }
 
-    $script:CertPasswordPlain = $plainPassword
-    $script:CertPassword      = ConvertTo-SecureString $plainPassword -AsPlainText -Force
-    $script:TenantName        = $cfg.Tenant
-
-    # Auth gate config. Both keys present -> gate enforced. Both absent -> gate
-    # skipped (existing deployments keep working until they set up the reg). Only
-    # one present is treated as a misconfiguration and blocks startup, so a
-    # half-configured gate can never silently fail open.
+    # Gate config from app-config.json (may be overridden by Load-ClientConfig).
+    # Both keys present -> gate enforced. Both absent -> gate skipped (backward compatible).
+    # Only one present is a misconfiguration; re-validated after Load-ClientConfig merges.
     $gateClient = if ($cfg.PSObject.Properties.Item('GateClientId')) { [string]$cfg.GateClientId } else { '' }
     $gateGroup  = if ($cfg.PSObject.Properties.Item('GateGroupId'))  { [string]$cfg.GateGroupId }  else { '' }
-    if ($gateClient -and -not $gateGroup) {
-        [System.Windows.Forms.MessageBox]::Show(
-            "app-config.json sets GateClientId but is missing GateGroupId.`n`nProvide both to enable the sign-in gate, or remove both to disable it.",
-            "Configuration Error", 'OK', 'Error') | Out-Null
-        exit
-    }
-    if ($gateGroup -and -not $gateClient) {
-        [System.Windows.Forms.MessageBox]::Show(
-            "app-config.json sets GateGroupId but is missing GateClientId.`n`nProvide both to enable the sign-in gate, or remove both to disable it.",
-            "Configuration Error", 'OK', 'Error') | Out-Null
-        exit
-    }
     $script:GateClientId = $gateClient
     $script:GateGroupId  = $gateGroup
     if ($cfg.PSObject.Properties.Item('GateAuthority') -and $cfg.GateAuthority) {
@@ -227,6 +235,36 @@ function Load-AppConfig {
     }
     if ($cfg.PSObject.Properties.Item('GateRequestContact')) {
         $script:GateRequestContact = [string]$cfg.GateRequestContact
+    }
+}
+
+# Loads per-client build config baked into the EXE by build.ps1. Overrides values
+# from app-config.json. When $EmbeddedCertPath is set the cert fields come from
+# client-config.json (password plaintext, no DPAPI) and the PFX from the temp path.
+function Load-ClientConfig {
+    param([string]$Path, [string]$EmbeddedCertPath = '')
+    if (-not $Path -or -not (Test-Path $Path)) { return }
+    try { $cfg = Get-Content $Path -Raw | ConvertFrom-Json }
+    catch { Write-Log "client-config.json parse error: $_" | Out-Null; return }
+
+    if ($cfg.PSObject.Properties.Item('LockedAdminUrl')      -and $cfg.LockedAdminUrl)      { $script:LockedAdminUrl      = [string]$cfg.LockedAdminUrl }
+    if ($cfg.PSObject.Properties.Item('CriticalSiteUrls')    -and $cfg.CriticalSiteUrls)    { $script:CriticalSiteUrls    = @($cfg.CriticalSiteUrls) }
+    if ($cfg.PSObject.Properties.Item('CriticalSiteGroupId') -and $cfg.CriticalSiteGroupId) { $script:CriticalSiteGroupId = [string]$cfg.CriticalSiteGroupId }
+    # Gate overrides: client-config wins over app-config.json when present
+    if ($cfg.PSObject.Properties.Item('GateClientId')       -and $cfg.GateClientId)       { $script:GateClientId       = [string]$cfg.GateClientId }
+    if ($cfg.PSObject.Properties.Item('GateGroupId')        -and $cfg.GateGroupId)        { $script:GateGroupId        = [string]$cfg.GateGroupId }
+    if ($cfg.PSObject.Properties.Item('GateRequestContact') -and $cfg.GateRequestContact) { $script:GateRequestContact = [string]$cfg.GateRequestContact }
+    # Embedded cert: CertPath comes from the temp-extracted PFX; password is plaintext in client-config
+    if ($EmbeddedCertPath -and (Test-Path $EmbeddedCertPath)) {
+        $script:CertPath = $EmbeddedCertPath
+        if ($cfg.PSObject.Properties.Item('CertPassword') -and $cfg.CertPassword) {
+            $plain = [string]$cfg.CertPassword
+            $script:CertPasswordPlain = $plain
+            $script:CertPassword      = ConvertTo-SecureString $plain -AsPlainText -Force
+        }
+        if ($cfg.PSObject.Properties.Item('Tenant') -and $cfg.Tenant) {
+            $script:TenantName = [string]$cfg.Tenant
+        }
     }
 }
 
@@ -299,6 +337,7 @@ function Invoke-AuthGate {
     param([string]$TenantHint = '')
     if (-not $script:GateClientId -or -not $script:GateGroupId) {
         Write-Log "Auth gate not configured (GateClientId/GateGroupId empty) -- skipping." | Out-Null
+        $script:CanManageCriticalSites = $true
         return @{ Authorized = $true; Cancelled = $false; Upn = ''; Reason = 'gate-disabled' }
     }
 
@@ -459,6 +498,8 @@ function Invoke-AuthGate {
 
     $authorized = @($groupClaim) -contains $script:GateGroupId
     if ($authorized) {
+        $script:CanManageCriticalSites = (-not $script:CriticalSiteGroupId) -or
+                                        (@($groupClaim) -contains $script:CriticalSiteGroupId)
         Write-Log "Auth gate: '$upn' authorized via group $script:GateGroupId." | Out-Null
         return @{ Authorized = $true; Cancelled = $false; Upn = $upn; Reason = 'ok' }
     }
@@ -1357,6 +1398,11 @@ function Show-AdminUrlDialog {
     $txt.Size            = New-Object System.Drawing.Size(398, 23)
     $txt.PlaceholderText = "https://yourtenant-admin.sharepoint.com"
     $txt.Text            = Get-LastUrl
+    if ($script:LockedAdminUrl) {
+        $txt.Text      = $script:LockedAdminUrl
+        $txt.ReadOnly  = $true
+        $txt.BackColor = [System.Drawing.SystemColors]::Control
+    }
 
     $btnOk = New-Object System.Windows.Forms.Button
     $btnOk.Text         = "Connect"
@@ -1524,6 +1570,14 @@ function Show-MainForm {
     $btnRefreshSites.Enabled  = $false
     $btnRefreshSites.Anchor   = [System.Windows.Forms.AnchorStyles]::Bottom -bor [System.Windows.Forms.AnchorStyles]::Left
 
+    $lblCriticalNote           = New-Object System.Windows.Forms.Label
+    $lblCriticalNote.Location  = New-Object System.Drawing.Point(348, 433)
+    $lblCriticalNote.Size      = New-Object System.Drawing.Size(540, 16)
+    $lblCriticalNote.ForeColor = [System.Drawing.Color]::FromArgb(185, 28, 28)
+    $lblCriticalNote.Font      = New-Object System.Drawing.Font('Segoe UI', 8)
+    $lblCriticalNote.Text      = ''
+    $lblCriticalNote.Anchor    = [System.Windows.Forms.AnchorStyles]::Bottom -bor [System.Windows.Forms.AnchorStyles]::Left
+
     $btnAbout             = New-Object System.Windows.Forms.Button
     $btnAbout.Text        = "About"
     $btnAbout.Location    = New-Object System.Drawing.Point(897, 400)
@@ -1551,7 +1605,7 @@ function Show-MainForm {
     $form.Controls.AddRange(@(
         $lblSignedIn, $lblSearch, $txtSearch, $btnSearch, $btnRefreshSearch, $lstUsers,
         $divider, $lblSites, $lblSelectedUser, $dgv, $lblScanOverlay,
-        $btnAdd, $btnRemove, $btnRefreshSites, $btnAbout, $rtbLog, $status
+        $btnAdd, $btnRemove, $btnRefreshSites, $lblCriticalNote, $btnAbout, $rtbLog, $status
     ))
 
     # Helper: update status bar and log
@@ -1573,10 +1627,12 @@ function Show-MainForm {
             $directIndicator = if ($m.HasDirectAndGroup) { '✓' } else { '' }
             [void]$dgv.Rows.Add($m.SiteName, $m.Role, $m.Sources, $directIndicator, $m.SiteUrl)
         }
-        # Row tinting: amber for Site Admin rows, blue for rows with multiple overlapping grants
+        # Row tinting: red for critical sites (priority), amber for Site Admin, blue for layered access
         for ($i = 0; $i -lt $dgv.Rows.Count; $i++) {
             $m = $script:Memberships[$i]
-            if ($m.Role -eq 'Admin') {
+            if ($script:CriticalSiteUrls -contains $m.SiteUrl) {
+                $dgv.Rows[$i].DefaultCellStyle.BackColor = [System.Drawing.Color]::FromArgb(254, 202, 202)
+            } elseif ($m.Role -eq 'Admin') {
                 $dgv.Rows[$i].DefaultCellStyle.BackColor = [System.Drawing.Color]::FromArgb(255, 236, 179)
             } elseif ($m.HasMultiple) {
                 $dgv.Rows[$i].DefaultCellStyle.BackColor = [System.Drawing.Color]::FromArgb(219, 234, 254)
@@ -1597,9 +1653,38 @@ function Show-MainForm {
         $txtSearch.Enabled        = $en
         $btnSearch.Enabled        = $en
         $btnRefreshSearch.Enabled = $en -and ($script:UserResults.Count -gt 0)
-        $btnAdd.Enabled           = $en -and ($null -ne $script:SelectedUser)
         $btnRefreshSites.Enabled  = $en -and ($null -ne $script:SelectedUser)
-        if ($Busy) { $btnRemove.Enabled = $false }
+        if ($Busy) {
+            $btnAdd.Enabled    = $false
+            $btnRemove.Enabled = $false
+        } else {
+            & $UpdateActionButtons
+        }
+    }
+
+    # Centralizes Add/Remove enabled state: applies both busy-state and critical-site rules.
+    # Called from $SetControlsBusy (on unlock) and $dgv.Add_SelectionChanged.
+    $UpdateActionButtons = {
+        if ($script:UiLocked -or -not $script:SelectedUser) {
+            $btnAdd.Enabled       = $false
+            $btnRemove.Enabled    = $false
+            $lblCriticalNote.Text = ''
+            return
+        }
+        if ($dgv.SelectedRows.Count -gt 0) {
+            $idx = $dgv.SelectedRows[0].Index
+            if ($idx -ge 0 -and $idx -lt $script:Memberships.Count) {
+                $m       = $script:Memberships[$idx]
+                $blocked = ($script:CriticalSiteUrls -contains $m.SiteUrl) -and -not $script:CanManageCriticalSites
+                $btnAdd.Enabled       = -not $blocked
+                $btnRemove.Enabled    = $m.CanRemove -and -not $blocked
+                $lblCriticalNote.Text = if ($blocked) { "This is a critical site — contact an administrator to manage access." } else { '' }
+                return
+            }
+        }
+        $btnAdd.Enabled       = $true
+        $btnRemove.Enabled    = $false
+        $lblCriticalNote.Text = ''
     }
 
     # Helper: run a full scan for the currently selected user and update the grid.
@@ -1745,16 +1830,8 @@ function Show-MainForm {
         }
     })
 
-    # Grid selection enables remove button only when there is a removable direct grant.
-    # Admin-only rows and group-only rows are read-only; CanRemove encodes the right condition.
-    $dgv.Add_SelectionChanged({
-        if (-not $script:UiLocked -and $script:SelectedUser -and $dgv.SelectedRows.Count -gt 0) {
-            $idx = $dgv.SelectedRows[0].Index
-            $btnRemove.Enabled = ($idx -ge 0 -and $idx -lt $script:Memberships.Count -and $script:Memberships[$idx].CanRemove)
-        } else {
-            $btnRemove.Enabled = $false
-        }
-    })
+    # Grid selection: update Add/Remove state including critical-site restriction.
+    $dgv.Add_SelectionChanged({ & $UpdateActionButtons })
 
     # Add to site
     $btnAdd.Add_Click({
@@ -1907,7 +1984,23 @@ Ensure-PnPModule
 
 Add-Type -AssemblyName System.Windows.Forms
 
-Load-AppConfig
+Load-AppConfig -SkipCertValidation ($EmbeddedCert -ne '')
+Load-ClientConfig -Path $ClientConfig -EmbeddedCertPath $EmbeddedCert
+
+# Re-validate gate config after merging app-config.json and client-config.json.
+# Catches half-configs where one key came from each source.
+if ($script:GateClientId -and -not $script:GateGroupId) {
+    [System.Windows.Forms.MessageBox]::Show(
+        "GateClientId is configured but GateGroupId is missing.`n`nProvide both to enable the sign-in gate, or remove both to disable it.",
+        "Configuration Error", 'OK', 'Error') | Out-Null
+    exit
+}
+if ($script:GateGroupId -and -not $script:GateClientId) {
+    [System.Windows.Forms.MessageBox]::Show(
+        "GateGroupId is configured but GateClientId is missing.`n`nProvide both to enable the sign-in gate, or remove both to disable it.",
+        "Configuration Error", 'OK', 'Error') | Out-Null
+    exit
+}
 
 $adminUrl = Show-AdminUrlDialog
 if (-not $adminUrl) { exit }

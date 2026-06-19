@@ -105,8 +105,9 @@ See [USAGE.md](USAGE.md) for day-to-day usage instructions and known behaviors.
 ## Roadmap
 
 - **First-run consent flow** *(done)* — the tool detects missing admin consent, opens the consent page automatically, and relaunches after approval
-- **Critical site flagging** — designate sensitive sites in config so they render with a red background in the site access grid as a visual warning
-- **Per-client build config** — bake a locked admin URL, critical site list, and feature flags into each compiled exe at build time so a client's exe can't be pointed at the wrong tenant
+- **Critical site flagging** *(done)* — critical sites render with a red background; users not in the designated power-user group have Add/Remove disabled on those rows
+- **Per-client build config** *(done)* — `build.ps1` accepts per-client parameters (locked admin URL, critical sites, gate config, embedded certificate); `build-wizard.ps1` provides a GUI for non-developers
+- **Security distribution guidance** *(planned)* — add a note to the README and build instructions warning that a per-client EXE with an embedded certificate is as sensitive as the PFX itself and must not be distributed over insecure channels such as email
 - **Admin URL validation** — clicking Continue on the admin URL prompt with no input currently closes the app silently; will show a validation message instead
 
 ## Code Signing

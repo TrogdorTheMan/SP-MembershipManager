@@ -16,6 +16,12 @@
 
   <ItemGroup>
     <EmbeddedResource Include="..\SP-MembershipManager.ps1" LogicalName="SP-MembershipManager.ps1" />
+    <EmbeddedResource Include="client-config.json"
+                      Condition="Exists('client-config.json')"
+                      LogicalName="client-config.json" />
+    <EmbeddedResource Include="embedded-cert.pfx"
+                      Condition="Exists('embedded-cert.pfx')"
+                      LogicalName="embedded-cert.pfx" />
   </ItemGroup>
 
 </Project>
