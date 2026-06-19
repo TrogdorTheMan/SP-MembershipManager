@@ -708,6 +708,36 @@ function Test-CertAppConsent {
     }
 }
 
+# Pre-flight check for the gate app: probe the token endpoint using an invalid
+# client_secret to surface AADSTS700016 (app not found / no service principal in
+# the tenant) without opening a browser. Public clients can't use client_credentials,
+# so the call always fails — but the error code tells us whether the SP exists.
+# Returns a consent URL if admin consent is needed, or $null if the SP already exists.
+function Test-GateAppConsent {
+    if (-not $script:GateClientId -or -not $script:GateGroupId) { return $null }
+    $tenant   = if ($script:TenantName) { $script:TenantName } else { 'organizations' }
+    $tokenUrl = "https://login.microsoftonline.com/$tenant/oauth2/v2.0/token"
+    try {
+        $client = [System.Net.Http.HttpClient]::new()
+        $pairs  = [System.Collections.Generic.List[System.Collections.Generic.KeyValuePair[string,string]]]::new()
+        $pairs.Add([System.Collections.Generic.KeyValuePair[string,string]]::new('client_id',     $script:GateClientId))
+        $pairs.Add([System.Collections.Generic.KeyValuePair[string,string]]::new('grant_type',    'client_credentials'))
+        $pairs.Add([System.Collections.Generic.KeyValuePair[string,string]]::new('scope',         'https://graph.microsoft.com/.default'))
+        $pairs.Add([System.Collections.Generic.KeyValuePair[string,string]]::new('client_secret', 'probe'))
+        $content = [System.Net.Http.FormUrlEncodedContent]::new($pairs)
+        $resp    = $client.PostAsync($tokenUrl, $content).GetAwaiter().GetResult()
+        $body    = $resp.Content.ReadAsStringAsync().GetAwaiter().GetResult() | ConvertFrom-Json
+        $client.Dispose()
+        if ($body.error_codes -and 700016 -in $body.error_codes) {
+            return Get-ConsentErrorMessage -ErrorText 'AADSTS700016' -ClientId $script:GateClientId
+        }
+        return $null
+    } catch {
+        Write-Log "Test-GateAppConsent: $($_.Exception.Message)" | Out-Null
+        return $null
+    }
+}
+
 # ---------------------------------------------------------------------------
 # SharePoint operations
 # ---------------------------------------------------------------------------
@@ -1741,7 +1771,6 @@ function Show-MainForm {
                 $consentMsg = Get-ConsentErrorMessage -ErrorText $errText
                 if ($consentMsg) {
                     Show-ConsentDialog -ConsentUrl $consentMsg
-                    Restart-App
                     $form.Close()
                 } else {
                     & $SetStatus "Connection failed: $errText"
@@ -2005,20 +2034,30 @@ if ($script:GateGroupId -and -not $script:GateClientId) {
 $adminUrl = Show-AdminUrlDialog
 if (-not $adminUrl) { exit }
 
+$tenantHint = Get-TenantFromAdminUrl -AdminUrl $adminUrl
+
+# Proactive consent checks (silent, no browser) before any interactive flow.
+# Cert app first, then gate app — both must be admin-consented before proceeding.
+$certConsentUrl = Test-CertAppConsent -TenantName $script:TenantName -AdminUrl $adminUrl
+if ($certConsentUrl) {
+    Show-ConsentDialog -ConsentUrl $certConsentUrl
+    exit
+}
+
+$gateConsentUrl = Test-GateAppConsent
+if ($gateConsentUrl) {
+    Show-ConsentDialog -ConsentUrl $gateConsentUrl
+    exit
+}
+
 # Authorization gate: the user signs in interactively and must be a member of the
-# approved security group. This runs before any cert connection, so an
-# unauthorized user never reaches the privileged app-only SharePoint session.
-$gate = Invoke-AuthGate -TenantHint (Get-TenantFromAdminUrl -AdminUrl $adminUrl)
+# approved security group. Consent for both apps is confirmed above, so the browser
+# should not show "Need admin approval" here.
+$gate = Invoke-AuthGate -TenantHint $tenantHint
 if (-not $gate.Authorized) {
     if (-not $gate.Cancelled -and -not $gate.ConsentShown) {
         Show-AccessDeniedDialog -Upn $gate.Upn -Reason $gate.Reason
     }
-    exit
-}
-
-$certConsentUrl = Test-CertAppConsent -TenantName $script:TenantName -AdminUrl $adminUrl
-if ($certConsentUrl) {
-    Show-ConsentDialog -ConsentUrl $certConsentUrl
     exit
 }
 
