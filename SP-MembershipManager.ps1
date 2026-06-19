@@ -417,8 +417,11 @@ function Invoke-AuthGate {
     } catch {
         Write-Log "Auth gate: sign-in failed - $_" | Out-Null
         $consentUrl = Get-ConsentErrorMessage -ErrorText $_.ToString() -ClientId $script:GateClientId
-        if ($consentUrl) { Show-ConsentDialog -ConsentUrl $consentUrl }
-        return @{ Authorized = $false; Cancelled = $false; Upn = ''; Reason = "signin: $($_.Exception.Message)" }
+        if ($consentUrl) {
+            Show-ConsentDialog -ConsentUrl $consentUrl
+            return @{ Authorized = $false; Cancelled = $false; ConsentShown = $true; Upn = ''; Reason = 'consent-shown' }
+        }
+        return @{ Authorized = $false; Cancelled = $false; ConsentShown = $false; Upn = ''; Reason = "signin: $($_.Exception.Message)" }
     }
 
     $claims = Get-IdTokenClaims -IdToken $result.IdToken
@@ -1906,7 +1909,11 @@ if (-not $adminUrl) { exit }
 # unauthorized user never reaches the privileged app-only SharePoint session.
 $gate = Invoke-AuthGate -TenantHint (Get-TenantFromAdminUrl -AdminUrl $adminUrl)
 if (-not $gate.Authorized) {
-    if (-not $gate.Cancelled) { Show-AccessDeniedDialog -Upn $gate.Upn -Reason $gate.Reason }
+    if ($gate.ConsentShown) {
+        Start-Process ([System.Diagnostics.Process]::GetCurrentProcess().MainModule.FileName)
+    } elseif (-not $gate.Cancelled) {
+        Show-AccessDeniedDialog -Upn $gate.Upn -Reason $gate.Reason
+    }
     exit
 }
 
