@@ -80,7 +80,7 @@ Run these tests after building a new EXE to verify per-client build config and c
 2. Search a user who has access to the HR site.
 3. Select the red HR site row.
 
-**Pass:** Add to Site and Remove from Site buttons are enabled. No red warning label is shown.
+**Pass:** "Add direct member access" and "Remove direct member access" buttons are enabled. No red warning label is shown.
 
 ---
 
@@ -92,7 +92,7 @@ Run these tests after building a new EXE to verify per-client build config and c
 2. Search a user who has access to the HR site.
 3. Select the red HR site row.
 
-**Pass:** Add to Site and Remove from Site buttons are **disabled**. A red label reads: *"This is a critical site — contact an administrator to manage access."*
+**Pass:** "Add direct member access" and "Remove direct member access" buttons are **disabled**. A red label reads: *"This is a critical site — contact an administrator to manage access."*
 
 ---
 
