@@ -1574,22 +1574,22 @@ function Show-MainForm {
     $lblScanOverlay.Visible   = $false
 
     $btnAdd               = New-Object System.Windows.Forms.Button
-    $btnAdd.Text          = "Add to Site..."
+    $btnAdd.Text          = "Add direct member access"
     $btnAdd.Location      = New-Object System.Drawing.Point(348, 400)
-    $btnAdd.Size          = New-Object System.Drawing.Size(110, 30)
+    $btnAdd.Size          = New-Object System.Drawing.Size(170, 30)
     $btnAdd.Enabled       = $false
     $btnAdd.Anchor        = [System.Windows.Forms.AnchorStyles]::Bottom -bor [System.Windows.Forms.AnchorStyles]::Left
 
     $btnRemove            = New-Object System.Windows.Forms.Button
-    $btnRemove.Text       = "Remove from Site"
-    $btnRemove.Location   = New-Object System.Drawing.Point(466, 400)
-    $btnRemove.Size       = New-Object System.Drawing.Size(130, 30)
+    $btnRemove.Text       = "Remove direct member access"
+    $btnRemove.Location   = New-Object System.Drawing.Point(526, 400)
+    $btnRemove.Size       = New-Object System.Drawing.Size(190, 30)
     $btnRemove.Enabled    = $false
     $btnRemove.Anchor     = [System.Windows.Forms.AnchorStyles]::Bottom -bor [System.Windows.Forms.AnchorStyles]::Left
 
     $btnRefreshSites      = New-Object System.Windows.Forms.Button
     $btnRefreshSites.Text     = "↻ Refresh"
-    $btnRefreshSites.Location = New-Object System.Drawing.Point(604, 400)
+    $btnRefreshSites.Location = New-Object System.Drawing.Point(724, 400)
     $btnRefreshSites.Size     = New-Object System.Drawing.Size(85, 30)
     $btnRefreshSites.Enabled  = $false
     $btnRefreshSites.Anchor   = [System.Windows.Forms.AnchorStyles]::Bottom -bor [System.Windows.Forms.AnchorStyles]::Left
