@@ -1472,11 +1472,9 @@ function Show-MainForm {
     $script:AllSites          = @()
     $script:UserResults       = @()
     $script:Memberships       = @()
-    $script:VerifyTimer       = $null
-    $script:VerifyTargetEmail = ''
     $script:SelectedUser = $null
     $script:ScanRunning  = $false   # true only while a scan is actively executing (re-entrancy guard)
-    $script:UiLocked     = $false   # true while a scan or its pending validation is in flight
+    $script:UiLocked     = $false   # true while a scan is in flight
 
     # Form
     $form                = New-Object System.Windows.Forms.Form
@@ -1572,7 +1570,7 @@ function Show-MainForm {
     $lblScanOverlay.TextAlign = [System.Drawing.ContentAlignment]::MiddleCenter
     $lblScanOverlay.ForeColor = [System.Drawing.Color]::Gray
     $lblScanOverlay.Font      = New-Object System.Drawing.Font('Segoe UI', 10, [System.Drawing.FontStyle]::Italic)
-    $lblScanOverlay.Text      = "Searching and validating..."
+    $lblScanOverlay.Text      = "Searching..."
     $lblScanOverlay.Visible   = $false
 
     $btnAdd               = New-Object System.Windows.Forms.Button
@@ -1716,17 +1714,16 @@ function Show-MainForm {
     # Helper: run a full scan for the currently selected user and update the grid.
     # Used by both the initial user-select handler and the Refresh button.
     $RunScan = {
-        param([string]$StatusPrefix = "Searching", [bool]$HoldGrid = $false)
         if ($script:ScanRunning) { return }   # guard against a re-entrant scan
         $u = $script:SelectedUser
         if (-not $u) { return }
         $script:ScanRunning = $true
         & $SetControlsBusy $true
         try {
-            & $SetStatus "$StatusPrefix site access for $($u.DisplayName)..."
+            & $SetStatus "Searching site access for $($u.DisplayName)..."
             $gm = Get-UserTransitiveGroupMap -UserUpn $u.Account
             $script:Memberships = @(Get-UserSiteMemberships -UserEmail $u.Email -AllSites $script:AllSites -LogBox $rtbLog -UserGroupMap $gm)
-            if (-not $HoldGrid) { & $RefreshGrid }
+            & $RefreshGrid
             $count      = $script:Memberships.Count
             $adminCount = @($script:Memberships | Where-Object { $_.Role -eq 'Admin' }).Count
             $mixedCount = @($script:Memberships | Where-Object { $_.HasMultiple }).Count
@@ -1780,8 +1777,6 @@ function Show-MainForm {
     $btnSearch.Add_Click({
         $query = $txtSearch.Text.Trim()
         if (-not $query) { return }
-        # Cancel any pending validation pass from a prior selection.
-        if ($script:VerifyTimer) { $script:VerifyTimer.Stop(); $script:VerifyTimer.Dispose(); $script:VerifyTimer = $null }
         & $SetStatus "Searching users..."
         $lstUsers.Items.Clear()
         $dgv.Rows.Clear()
@@ -1812,41 +1807,15 @@ function Show-MainForm {
     $lstUsers.Add_SelectedIndexChanged({
         $idx = $lstUsers.SelectedIndex
         if ($idx -lt 0 -or $idx -ge $script:UserResults.Count) { return }
-        # Cancel any pending auto-verify re-scan from a prior selection
-        if ($script:VerifyTimer) { $script:VerifyTimer.Stop(); $script:VerifyTimer.Dispose(); $script:VerifyTimer = $null }
         $script:SelectedUser = $script:UserResults[$idx]
         $lblSelectedUser.Text = "$($script:SelectedUser.DisplayName)  |  $($script:SelectedUser.Email)"
         $dgv.Rows.Clear()
         $dgv.Visible = $false
-        $lblScanOverlay.Text = "Searching and validating..."
+        $lblScanOverlay.Text = "Searching..."
         $lblScanOverlay.Visible = $true
         $btnRemove.Enabled = $false
         try {
-            & $RunScan -HoldGrid $true
-            # Keep the site-access actions locked through the pending validation pass so the
-            # user can't change membership or kick off a competing scan before it confirms.
-            # The left-hand search panel stays usable so they can switch users if they want.
-            $btnAdd.Enabled          = $false
-            $btnRemove.Enabled       = $false
-            $btnRefreshSites.Enabled = $false
-            $script:UiLocked         = $true
-            $lblStatus.Text = "$($lblStatus.Text)  (validating...)"
-            # Schedule a confirming re-scan shortly after, to catch any SP Online
-            # replication lag (e.g. a stale count right after an add/remove).
-            $script:VerifyTargetEmail = $script:SelectedUser.Email
-            $script:VerifyTimer = New-Object System.Windows.Forms.Timer
-            $script:VerifyTimer.Interval = 2000
-            $script:VerifyTimer.Add_Tick({
-                $script:VerifyTimer.Stop()
-                $script:VerifyTimer.Dispose()
-                $script:VerifyTimer = $null
-                if ($script:SelectedUser -and $script:SelectedUser.Email -eq $script:VerifyTargetEmail) {
-                    try { & $RunScan -StatusPrefix "Validating" } catch { }
-                }
-                # Re-enable the controls once the verification pass is done (or skipped).
-                & $SetControlsBusy $false
-            })
-            $script:VerifyTimer.Start()
+            & $RunScan
         } catch {
             $lblScanOverlay.Visible = $false
             $dgv.Visible = $true
@@ -1962,31 +1931,12 @@ function Show-MainForm {
     # Refresh site access (re-scans for currently selected user)
     $btnRefreshSites.Add_Click({
         if ($script:UiLocked -or -not $script:SelectedUser) { return }
-        if ($script:VerifyTimer) { $script:VerifyTimer.Stop(); $script:VerifyTimer.Dispose(); $script:VerifyTimer = $null }
         $dgv.Rows.Clear()
         $dgv.Visible = $false
-        $lblScanOverlay.Text = "Searching and validating..."
+        $lblScanOverlay.Text = "Searching..."
         $lblScanOverlay.Visible = $true
         try {
-            & $RunScan -HoldGrid $true
-            $btnAdd.Enabled          = $false
-            $btnRemove.Enabled       = $false
-            $btnRefreshSites.Enabled = $false
-            $script:UiLocked         = $true
-            $lblStatus.Text = "$($lblStatus.Text)  (validating...)"
-            $script:VerifyTargetEmail = $script:SelectedUser.Email
-            $script:VerifyTimer = New-Object System.Windows.Forms.Timer
-            $script:VerifyTimer.Interval = 2000
-            $script:VerifyTimer.Add_Tick({
-                $script:VerifyTimer.Stop()
-                $script:VerifyTimer.Dispose()
-                $script:VerifyTimer = $null
-                if ($script:SelectedUser -and $script:SelectedUser.Email -eq $script:VerifyTargetEmail) {
-                    try { & $RunScan -StatusPrefix "Validating" } catch { }
-                }
-                & $SetControlsBusy $false
-            })
-            $script:VerifyTimer.Start()
+            & $RunScan
         } catch {
             $lblScanOverlay.Visible = $false
             $dgv.Visible = $true
