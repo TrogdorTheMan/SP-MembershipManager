@@ -30,7 +30,8 @@ try
     {
         FileName = pwsh,
         // Pass -LauncherDir so the script can locate app-config.json next to the exe.
-        Arguments = $"-NonInteractive -File \"{tempScript}\" -LauncherDir \"{exeDir}\"",
+        // Pass -LauncherExe so the script can relaunch the exe (not pwsh) on consent.
+        Arguments = $"-NonInteractive -File \"{tempScript}\" -LauncherDir \"{exeDir}\" -LauncherExe \"{Environment.ProcessPath}\"",
         UseShellExecute = false,
         CreateNoWindow = true,
     };

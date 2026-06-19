@@ -17,7 +17,10 @@
 param(
     # Passed by the C# launcher so the script can locate app-config.json
     # next to the exe rather than in the temp folder it was extracted to.
-    [string]$LauncherDir = ''
+    [string]$LauncherDir = '',
+    # Passed by the C# launcher so Restart-App can relaunch the exe directly
+    # rather than relaunching pwsh against the temp PS1 (which may be deleted).
+    [string]$LauncherExe = ''
 )
 
 Set-StrictMode -Version Latest
@@ -43,11 +46,13 @@ $script:LogDir  = "C:\temp\SP-MembershipManager\Logs"
 $script:LogFile = Join-Path $script:LogDir "log_$(Get-Date -Format 'yyyy-MM-dd').txt"
 
 function Restart-App {
+    if ($LauncherExe -and (Test-Path $LauncherExe)) {
+        Start-Process $LauncherExe
+        return
+    }
     $exe = [System.Diagnostics.Process]::GetCurrentProcess().MainModule.FileName
     if ($PSCommandPath -and ($exe -match 'pwsh\.exe$|powershell\.exe$')) {
-        $argList = @("-NonInteractive", "-File", "`"$PSCommandPath`"")
-        if ($LauncherDir) { $argList += @("-LauncherDir", "`"$LauncherDir`"") }
-        Start-Process $exe -ArgumentList $argList
+        Start-Process $exe -ArgumentList @("-NonInteractive", "-File", "`"$PSCommandPath`"")
     } else {
         Start-Process $exe
     }
@@ -589,7 +594,7 @@ function Show-ConsentDialog {
     $font = New-Object System.Drawing.Font('Segoe UI', 9)
 
     $lblMsg = New-Object System.Windows.Forms.Label
-    $lblMsg.Text      = "A browser tab has opened automatically to request admin consent for this tenant.`n`nA Global Administrator needs to sign in and approve — this is a one-time step. Once they've approved, click Relaunch below.`n`nIf you're not an administrator, contact your IT team to request access."
+    $lblMsg.Text      = "A browser tab has opened automatically to request admin consent for this tenant.`n`nA Global Administrator needs to sign in and approve — this is a one-time step. Once they've approved, click Relaunch below.`n`nIf you're not an administrator, provide the link below to your IT team to request access:"
     $lblMsg.Location  = New-Object System.Drawing.Point($textX, $margin)
     $lblMsg.MaximumSize = New-Object System.Drawing.Size($contentW, 0)
     $lblMsg.AutoSize  = $true
