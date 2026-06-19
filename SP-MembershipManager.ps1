@@ -1932,6 +1932,7 @@ try {
     $consentMsg = Get-ConsentErrorMessage -ErrorText $errText
     if ($consentMsg) {
         Show-ConsentDialog -ConsentUrl $consentMsg
+        Start-Process ([System.Diagnostics.Process]::GetCurrentProcess().MainModule.FileName)
     } else {
         [System.Windows.Forms.MessageBox]::Show(
             "Could not connect to tenant:`n$errText",
