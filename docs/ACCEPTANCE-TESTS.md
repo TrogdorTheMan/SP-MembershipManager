@@ -16,6 +16,7 @@ Run these tests after building a new EXE to verify per-client build config and c
 6. No rows have a red background.
 
 **Pass:** Behavior is identical to pre-feature baseline. No regressions.
+- 06-18-26: Passes all tests when using a user with proper access. Still need to validate user without access is denied.
 
 ---
 
