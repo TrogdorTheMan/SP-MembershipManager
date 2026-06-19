@@ -10,7 +10,7 @@
     Uses PnP.PowerShell for SharePoint operations and WinForms for the UI.
 
 .NOTES
-    License: MIT
+    License: GPLv3
     Repository: https://github.com/TrogdorTheMan/SP-MembershipManager
 #>
 
@@ -444,7 +444,7 @@ function Invoke-AuthGate {
     <p class="footer">
       &copy; 2026 Cory Francis &nbsp;&middot;&nbsp;
       <a href="https://github.com/TrogdorTheMan/SP-MembershipManager">SP-MembershipManager</a>
-      &nbsp;&middot;&nbsp; MIT License
+      &nbsp;&middot;&nbsp; GPLv3 License
     </p>
   </div>
 </body>
@@ -1264,7 +1264,7 @@ function Show-AboutDialog {
     $lblAuthor.AutoSize = $true
 
     $lblYear = New-Object System.Windows.Forms.Label
-    $lblYear.Text      = "$(Get-Date -Format 'yyyy')  |  MIT License"
+    $lblYear.Text      = "$(Get-Date -Format 'yyyy')  |  GPLv3 License"
     $lblYear.Location  = New-Object System.Drawing.Point(20, 74)
     $lblYear.AutoSize  = $true
     $lblYear.ForeColor = [System.Drawing.Color]::DimGray
