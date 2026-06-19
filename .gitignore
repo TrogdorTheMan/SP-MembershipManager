@@ -1,6 +1,10 @@
 # Build output
 build/output/
 
+# .NET build intermediates (may embed baked-in per-client IDs from client-config.json)
+launcher/bin/
+launcher/obj/
+
 # Logs
 logs/
 

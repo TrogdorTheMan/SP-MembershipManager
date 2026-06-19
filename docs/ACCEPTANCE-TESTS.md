@@ -116,13 +116,23 @@ Run these tests after building a new EXE to verify per-client build config and c
 
 ---
 
-## AT-9: Half-config validation
+## AT-9: Half-config rejected at build time
 
-**Setup:** `.\build.ps1 -GateClientId "some-client-id"` (no `-GateGroupId`), with `app-config.json` also missing GateGroupId.
+**Setup:** `.\build.ps1 -GateClientId "some-client-id"` (no `-GateGroupId`).
+
+1. Run the build.
+
+**Pass:** The build aborts immediately with: *"-GateClientId was supplied without -GateGroupId. The sign-in gate requires both (or neither)."* No EXE is produced.
+
+---
+
+## AT-9b: Half-config guard at runtime (defense in depth)
+
+**Setup:** Build a normal EXE, then hand-edit the runtime `app-config.json` to add `GateClientId` but no `GateGroupId`.
 
 1. Launch the EXE.
 
-**Pass:** Error dialog on startup: *"GateClientId is configured but GateGroupId is missing."* App does not continue.
+**Pass:** Error dialog on startup: *"GateClientId is configured but GateGroupId is missing."* App does not continue. (This guard covers configs that bypass `build.ps1`.)
 
 ---
 
@@ -136,3 +146,15 @@ Run these tests after building a new EXE to verify per-client build config and c
 6. EXE is produced at `build\output\SP-MembershipManager.exe`.
 
 **Pass:** Wizard produces a working EXE equivalent to the corresponding `build.ps1` command-line invocation.
+
+---
+
+## AT-11: Wizard gate validation
+
+1. Run `.\build-wizard.ps1`.
+2. Fill in **Gate Client ID** but leave **Gate Group ID** blank. Click **Build**.
+   - **Pass:** Validation error: *"Gate Group ID is required..."* No build runs.
+3. Clear both gate fields. Click **Build**.
+   - **Pass:** Warning dialog: *"This build has NO sign-in gate..."* with Yes/No. Clicking **No** cancels; clicking **Yes** proceeds with a gate-less build.
+4. Fill in both gate fields. Click **Build**.
+   - **Pass:** Build runs with no validation prompts.

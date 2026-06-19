@@ -165,6 +165,26 @@ $btnBuild.Add_Click({
         return
     }
 
+    # Validate gate params: both-or-neither. A half-configured gate produces an EXE
+    # that fails at startup.
+    $gateClient = $txtGateClientId.Text.Trim()
+    $gateGroup  = $txtGateGroupId.Text.Trim()
+    if ([bool]$gateClient -ne [bool]$gateGroup) {
+        $missing = if ($gateClient) { 'Gate Group ID' } else { 'Gate Client ID' }
+        [System.Windows.Forms.MessageBox]::Show(
+            "$missing is required. The sign-in gate needs both Gate Client ID and Gate Group ID (or leave both blank to disable it).",
+            "Validation Error", 'OK', 'Error') | Out-Null
+        return
+    }
+
+    # No gate at all -> anyone in the tenant can use the tool. Require explicit confirmation.
+    if (-not $gateClient -and -not $gateGroup) {
+        $proceed = [System.Windows.Forms.MessageBox]::Show(
+            "This build has NO sign-in gate.`n`nAny user who can run the EXE will be able to use it — there is no authorization check. Build anyway?",
+            "No Sign-In Gate", 'YesNo', 'Warning')
+        if ($proceed -ne 'Yes') { return }
+    }
+
     # Build param array
     $params = @{}
     if ($txtCertPath.Text.Trim())            { $params['CertPath']            = $txtCertPath.Text.Trim() }

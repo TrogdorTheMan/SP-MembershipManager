@@ -52,6 +52,9 @@
     For a guided UI, run build-wizard.ps1 instead.
 #>
 
+[Diagnostics.CodeAnalysis.SuppressMessageAttribute(
+    'PSAvoidUsingPlainTextForPassword', 'CertPassword',
+    Justification = 'The cert password is written verbatim into the embedded client-config.json so the EXE is self-contained; it must be plaintext at build time. A SecureString would be converted straight back to plaintext at the embed step, adding no protection.')]
 param(
     [string]$LockedAdminUrl      = '',
     [string[]]$CriticalSiteUrls  = @(),
@@ -82,6 +85,14 @@ if ($CertPath -and (-not $CertPassword -or -not $Tenant)) {
 }
 if ($CertPath -and -not (Test-Path $CertPath)) {
     throw "Certificate file not found: $CertPath"
+}
+
+# Validate gate params: both-or-neither. A half-configured gate bakes a broken
+# EXE that fails at startup, so reject it at build time instead.
+if ([bool]$GateClientId -ne [bool]$GateGroupId) {
+    $have = if ($GateClientId) { '-GateClientId' } else { '-GateGroupId' }
+    $need = if ($GateClientId) { '-GateGroupId' } else { '-GateClientId' }
+    throw "$have was supplied without $need. The sign-in gate requires both (or neither)."
 }
 
 # Determine whether to generate embedded resources
