@@ -1049,9 +1049,6 @@ function Get-UserSiteMemberships {
             # Unique source names, sorted
             $allSources      = @($grantList | ForEach-Object { $_.Source } | Select-Object -Unique | Sort-Object)
             $viaGroupSources = @($allSources | Where-Object { $_ -like 'via *' })
-            # Derive from already-computed $directRole — avoids [bool](PSCustomObject) cast
-            # which throws in PowerShell 7 when the pipeline returns a single object.
-            $hasDirectGrant  = ($null -ne $directRole)
 
             # Suppress "Direct" from the Access display when group sources already explain access.
             # SP materializes nested group members as i:0#.f| entries, making them look direct.
@@ -1067,7 +1064,6 @@ function Get-UserSiteMemberships {
                 Sources            = ($displaySources -join ' + ')
                 RemainingSources   = ($remainingSources -join ' + ')
                 HasMultiple        = ($grantList.Count -gt 1)
-                HasDirectAndGroup  = ($hasDirectGrant -and $viaGroupSources.Count -gt 0)
                 CanRemove          = ($null -ne $directRole)
                 ScanWarnings       = $scanWarnings
             }
@@ -1560,7 +1556,7 @@ function Show-MainForm {
     [void]$dgv.Columns.Add('Site', 'Site')
     [void]$dgv.Columns.Add('Role', 'Role')
     [void]$dgv.Columns.Add('Access', 'Access')
-    [void]$dgv.Columns.Add('Direct', 'Direct & Group')
+    [void]$dgv.Columns.Add('Direct', 'Direct')
     [void]$dgv.Columns.Add('URL', 'URL')
     $dgv.Columns['Site'].FillWeight   = 30
     $dgv.Columns['Role'].FillWeight   = 10
@@ -1654,7 +1650,7 @@ function Show-MainForm {
         $dgv.Visible = $true
         $dgv.Rows.Clear()
         foreach ($m in $script:Memberships) {
-            $directIndicator = if ($m.HasDirectAndGroup) { '✓' } else { '' }
+            $directIndicator = if ($m.DirectRole) { '✓' } else { '' }
             [void]$dgv.Rows.Add($m.SiteName, $m.Role, $m.Sources, $directIndicator, $m.SiteUrl)
         }
         # Row tinting: red for critical sites (priority), amber for Site Admin, blue for layered access
