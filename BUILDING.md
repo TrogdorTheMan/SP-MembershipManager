@@ -9,6 +9,8 @@ There are two ways to build:
 
 Both produce the **same** result. The wizard just fills in the command line for you.
 
+![Build pipeline](docs/build-pipeline.svg)
+
 > **Heads up — builds are local.** This project is **not** built by GitHub Actions anymore, and the artifact on the Actions tab is a **gate-less** build (no sign-in restriction). Do not distribute it. Always build the EXE yourself using this guide so the per-client settings (and the sign-in gate) are baked in correctly.
 
 ---

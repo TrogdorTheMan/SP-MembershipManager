@@ -1,0 +1,106 @@
+<svg viewBox="0 0 770 440" xmlns="http://www.w3.org/2000/svg" font-family="Segoe UI, sans-serif" font-size="13">
+
+  <!-- Background -->
+  <rect width="770" height="440" fill="#f8f9fa" rx="8"/>
+
+  <!-- ── Zone 1: Inputs ── -->
+  <rect x="16" y="16" width="180" height="252" rx="8" fill="#eef0f4" stroke="#c8cdd6" stroke-width="1.5"/>
+  <text x="106" y="38" text-anchor="middle" font-size="11" font-weight="600" fill="#6b7280">INPUTS</text>
+
+  <rect x="32" y="52" width="148" height="44" rx="6" fill="#dde1ea" stroke="#c8cdd6" stroke-width="1"/>
+  <text x="106" y="72" text-anchor="middle" font-size="11" font-weight="600" fill="#1a1a2e">SP-MembershipManager.ps1</text>
+  <text x="106" y="87" text-anchor="middle" font-size="10" fill="#6b7280">app source script</text>
+
+  <rect x="32" y="108" width="148" height="78" rx="6" fill="#dde1ea" stroke="#c8cdd6" stroke-width="1"/>
+  <text x="106" y="128" text-anchor="middle" font-size="11" font-weight="600" fill="#1a1a2e">Per-client settings</text>
+  <text x="106" y="145" text-anchor="middle" font-size="10" fill="#6b7280">cert · tenant · gate</text>
+  <text x="106" y="159" text-anchor="middle" font-size="10" fill="#6b7280">critical sites</text>
+  <text x="106" y="173" text-anchor="middle" font-size="10" fill="#6b7280">locked admin URL</text>
+
+  <rect x="32" y="198" width="148" height="44" rx="6" fill="#dde1ea" stroke="#c8cdd6" stroke-width="1"/>
+  <text x="106" y="218" text-anchor="middle" font-size="11" font-weight="600" fill="#1a1a2e">sp-mm.pfx</text>
+  <text x="106" y="233" text-anchor="middle" font-size="10" fill="#6b7280">optional — embed in EXE</text>
+
+  <!-- ── Zone 2: Build ── -->
+  <rect x="216" y="16" width="300" height="300" rx="8" fill="#eef0f4" stroke="#c8cdd6" stroke-width="1.5"/>
+  <text x="366" y="38" text-anchor="middle" font-size="11" font-weight="600" fill="#6b7280">BUILD  (local — no CI)</text>
+
+  <rect x="232" y="52" width="132" height="52" rx="6" fill="#dde1ea" stroke="#c8cdd6" stroke-width="1"/>
+  <text x="298" y="74" text-anchor="middle" font-size="11" font-weight="600" fill="#1a1a2e">build-wizard.ps1</text>
+  <text x="298" y="91" text-anchor="middle" font-size="10" fill="#6b7280">guided GUI</text>
+
+  <rect x="372" y="52" width="128" height="52" rx="6" fill="#dde1ea" stroke="#c8cdd6" stroke-width="1"/>
+  <text x="436" y="74" text-anchor="middle" font-size="11" font-weight="600" fill="#1a1a2e">build.ps1</text>
+  <text x="436" y="91" text-anchor="middle" font-size="10" fill="#6b7280">CLI / scriptable</text>
+
+  <!-- build-lib.ps1 shared logic -->
+  <rect x="232" y="134" width="268" height="118" rx="7" fill="#1e3a8a"/>
+  <text x="366" y="156" text-anchor="middle" font-size="12" font-weight="700" fill="#ffffff">build-lib.ps1  ·  shared logic</text>
+  <rect x="246" y="166" width="240" height="34" rx="4" fill="rgba(255,255,255,0.18)"/>
+  <text x="366" y="187" text-anchor="middle" font-size="10" fill="#dbeafe">Assert-BuildParams — validate cert/gate rules</text>
+  <rect x="246" y="206" width="240" height="34" rx="4" fill="rgba(255,255,255,0.18)"/>
+  <text x="366" y="227" text-anchor="middle" font-size="10" fill="#dbeafe">New-ClientConfig — build client-config.json</text>
+
+  <!-- dotnet publish -->
+  <rect x="298" y="272" width="136" height="32" rx="6" fill="#dde1ea" stroke="#c8cdd6" stroke-width="1"/>
+  <text x="366" y="292" text-anchor="middle" font-size="11" font-weight="600" fill="#1a1a2e">dotnet publish</text>
+
+  <!-- ── Zone 3: Output ── -->
+  <rect x="536" y="16" width="218" height="300" rx="8" fill="#eef0f4" stroke="#c8cdd6" stroke-width="1.5"/>
+  <text x="645" y="38" text-anchor="middle" font-size="11" font-weight="600" fill="#6b7280">OUTPUT</text>
+
+  <!-- dry-run preview -->
+  <rect x="552" y="52" width="186" height="62" rx="6" fill="#fef9c3" stroke="#d97706" stroke-width="1"/>
+  <text x="645" y="73" text-anchor="middle" font-size="11" font-weight="600" fill="#92400e">client-config.preview.json</text>
+  <text x="645" y="89" text-anchor="middle" font-size="10" fill="#92400e">-ConfigOnly dry run</text>
+  <text x="645" y="103" text-anchor="middle" font-size="10" fill="#92400e">(validates, no compile)</text>
+
+  <!-- exe artifact -->
+  <rect x="552" y="150" width="186" height="116" rx="7" fill="#2563eb"/>
+  <text x="645" y="172" text-anchor="middle" font-size="12" font-weight="700" fill="#ffffff">SP-MembershipManager.exe</text>
+  <text x="645" y="192" text-anchor="middle" font-size="10" fill="#dbeafe">embeds:</text>
+  <text x="645" y="208" text-anchor="middle" font-size="10" fill="#dbeafe">• app .ps1</text>
+  <text x="645" y="224" text-anchor="middle" font-size="10" fill="#dbeafe">• client-config.json</text>
+  <text x="645" y="240" text-anchor="middle" font-size="10" fill="#dbeafe">• certificate (if provided)</text>
+
+  <!-- ── Zone 4: Verify ── -->
+  <rect x="216" y="332" width="300" height="92" rx="8" fill="#eef0f4" stroke="#c8cdd6" stroke-width="1.5"/>
+  <text x="366" y="354" text-anchor="middle" font-size="11" font-weight="600" fill="#6b7280">VERIFY  (headless)</text>
+
+  <rect x="232" y="366" width="268" height="46" rx="6" fill="#dcfce7" stroke="#16a34a" stroke-width="1"/>
+  <text x="366" y="386" text-anchor="middle" font-size="11" font-weight="600" fill="#166534">tests/build.Tests.ps1 — Pester 5</text>
+  <text x="366" y="401" text-anchor="middle" font-size="10" fill="#166534">19 checks · no SharePoint, auth, or users</text>
+
+  <!-- ── Arrows ── -->
+  <!-- inputs → build-lib -->
+  <line x1="196" y1="180" x2="232" y2="186" stroke="#6b7280" stroke-width="1.5" marker-end="url(#ad)"/>
+
+  <!-- wizard → build.ps1 -->
+  <line x1="364" y1="78" x2="372" y2="78" stroke="#6b7280" stroke-width="1.5" marker-end="url(#ad)"/>
+  <text x="368" y="48" text-anchor="middle" font-size="9" fill="#6b7280">calls</text>
+
+  <!-- build.ps1 → build-lib -->
+  <line x1="436" y1="104" x2="436" y2="134" stroke="#6b7280" stroke-width="1.5" marker-end="url(#ad)"/>
+
+  <!-- build-lib → dotnet publish -->
+  <line x1="366" y1="252" x2="366" y2="272" stroke="#6b7280" stroke-width="1.5" marker-end="url(#ad)"/>
+
+  <!-- dotnet publish → exe -->
+  <path d="M 434 286 Q 510 270 552 218" fill="none" stroke="#2563eb" stroke-width="1.5" marker-end="url(#ab)"/>
+  <text x="512" y="248" text-anchor="middle" font-size="9" fill="#2563eb">compile + embed</text>
+
+  <!-- build-lib (config) → preview (dashed) -->
+  <path d="M 486 214 Q 540 150 552 96" fill="none" stroke="#d97706" stroke-width="1.5" stroke-dasharray="5,3" marker-end="url(#ao)"/>
+  <text x="556" y="138" text-anchor="middle" font-size="9" fill="#d97706">-ConfigOnly</text>
+
+  <!-- Pester → build-lib (dashed) -->
+  <line x1="280" y1="366" x2="280" y2="252" stroke="#16a34a" stroke-width="1.5" stroke-dasharray="5,3" marker-end="url(#ag)"/>
+  <text x="248" y="300" text-anchor="middle" font-size="9" fill="#16a34a">exercises</text>
+
+  <defs>
+    <marker id="ab" markerWidth="8" markerHeight="8" refX="6" refY="3" orient="auto"><path d="M0,0 L0,6 L8,3 z" fill="#2563eb"/></marker>
+    <marker id="ad" markerWidth="8" markerHeight="8" refX="6" refY="3" orient="auto"><path d="M0,0 L0,6 L8,3 z" fill="#6b7280"/></marker>
+    <marker id="ao" markerWidth="8" markerHeight="8" refX="6" refY="3" orient="auto"><path d="M0,0 L0,6 L8,3 z" fill="#d97706"/></marker>
+    <marker id="ag" markerWidth="8" markerHeight="8" refX="6" refY="3" orient="auto"><path d="M0,0 L0,6 L8,3 z" fill="#16a34a"/></marker>
+  </defs>
+</svg>
