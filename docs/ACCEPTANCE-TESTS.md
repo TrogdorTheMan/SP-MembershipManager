@@ -1,10 +1,30 @@
-# SP-MembershipManager — Manual Acceptance Tests
+# SP-MembershipManager — Acceptance Tests
 
 Run these tests after building a new EXE to verify per-client build config and critical site flagging work correctly.
 
+## Automated coverage
+
+Build-time validation and config-generation are now covered by a headless Pester
+suite (`tests/build.Tests.ps1`) that never connects to SharePoint, authenticates,
+or modifies any user. Run it in ~2 seconds with:
+
+```powershell
+Invoke-Pester -Path .\tests\build.Tests.ps1 -Output Detailed   # requires Pester 5+
+```
+
+Each test below is tagged:
+- **🟢 Auto (build half)** — the parameter/validation logic is covered by the suite.
+  You only need the manual steps to confirm GUI/runtime behavior on a final build.
+- **🔴 Manual** — requires interactive sign-in and a live tenant; not automatable
+  without UI automation and dedicated test accounts.
+
+For fast iteration without a full compile, `build.ps1 -ConfigOnly` validates the
+parameters and writes the generated config to `build\output\client-config.preview.json`
+without running `dotnet publish`.
+
 ---
 
-## AT-1: Unconfigured build (regression baseline)
+## AT-1: Unconfigured build (regression baseline) — 🔴 Manual
 
 **Setup:** `.\build.ps1` (no parameters)
 
@@ -20,7 +40,7 @@ Run these tests after building a new EXE to verify per-client build config and c
 
 ---
 
-## AT-2: Locked admin URL
+## AT-2: Locked admin URL — 🟢 Auto (build half) + 🔴 Manual (read-only UI)
 
 **Setup:** `.\build.ps1 -LockedAdminUrl "https://yourtenant-admin.sharepoint.com"`
 
@@ -33,7 +53,7 @@ Run these tests after building a new EXE to verify per-client build config and c
 
 ---
 
-## AT-3: Fully self-contained EXE (embedded cert)
+## AT-3: Fully self-contained EXE (embedded cert) — 🟢 Auto (build half) + 🔴 Manual (launch)
 
 **Setup:**
 ```powershell
@@ -52,7 +72,7 @@ Run these tests after building a new EXE to verify per-client build config and c
 
 ---
 
-## AT-4: Critical site red highlighting
+## AT-4: Critical site red highlighting — 🟢 Auto (build half) + 🔴 Manual (highlight)
 
 **Setup:** `.\build.ps1 -CriticalSiteUrls @("https://yourtenant.sharepoint.com/sites/HR")`
 
@@ -65,7 +85,7 @@ Run these tests after building a new EXE to verify per-client build config and c
 
 ---
 
-## AT-5: Critical site — power user CAN manage
+## AT-5: Critical site — power user CAN manage — 🔴 Manual
 
 **Setup:**
 ```powershell
@@ -84,7 +104,7 @@ Run these tests after building a new EXE to verify per-client build config and c
 
 ---
 
-## AT-6: Critical site — standard user CANNOT manage
+## AT-6: Critical site — standard user CANNOT manage — 🔴 Manual
 
 **Setup:** Same build as AT-5.
 
@@ -96,7 +116,7 @@ Run these tests after building a new EXE to verify per-client build config and c
 
 ---
 
-## AT-7: Critical site — non-critical rows unaffected
+## AT-7: Critical site — non-critical rows unaffected — 🔴 Manual
 
 **Setup:** Same build as AT-5, signed in as the standard (non-power) user from AT-6.
 
@@ -106,7 +126,7 @@ Run these tests after building a new EXE to verify per-client build config and c
 
 ---
 
-## AT-8: Gate config baked into EXE
+## AT-8: Gate config baked into EXE — 🟢 Auto (build half) + 🔴 Manual (Access Denied)
 
 **Setup:** Build with `-GateClientId` and `-GateGroupId`. Use an `app-config.json` that has NO GateClientId or GateGroupId keys.
 
@@ -117,7 +137,7 @@ Run these tests after building a new EXE to verify per-client build config and c
 
 ---
 
-## AT-9: Half-config rejected at build time
+## AT-9: Half-config rejected at build time — 🟢 Auto
 
 **Setup:** `.\build.ps1 -GateClientId "some-client-id"` (no `-GateGroupId`).
 
@@ -127,7 +147,7 @@ Run these tests after building a new EXE to verify per-client build config and c
 
 ---
 
-## AT-9b: Half-config guard at runtime (defense in depth)
+## AT-9b: Half-config guard at runtime (defense in depth) — 🟢 Auto (rule) + 🔴 Manual (dialog)
 
 **Setup:** Build a normal EXE, then hand-edit the runtime `app-config.json` to add `GateClientId` but no `GateGroupId`.
 
@@ -137,7 +157,7 @@ Run these tests after building a new EXE to verify per-client build config and c
 
 ---
 
-## AT-10: Build wizard
+## AT-10: Build wizard — 🔴 Manual
 
 1. Run `.\build-wizard.ps1`.
 2. A WinForms window opens with labeled fields for all build parameters.
@@ -150,7 +170,7 @@ Run these tests after building a new EXE to verify per-client build config and c
 
 ---
 
-## AT-11: Wizard gate validation
+## AT-11: Wizard gate validation — 🔴 Manual (WinForms validation)
 
 1. Run `.\build-wizard.ps1`.
 2. Fill in **Gate Client ID** but leave **Gate Group ID** blank. Click **Build**.

@@ -47,6 +47,12 @@
 .PARAMETER Tenant
     Tenant name (e.g. contoso.onmicrosoft.com). Required when CertPath is set.
 
+.PARAMETER ConfigOnly
+    Dry run: validate parameters and write the generated client-config.json to
+    build\output\client-config.preview.json, then stop WITHOUT compiling the EXE.
+    Used for fast iteration and by the test suite to inspect baked config. Does
+    not touch launcher\client-config.json or run dotnet publish.
+
 .NOTES
     Install the .NET 8 SDK from https://dotnet.microsoft.com/download
     For a guided UI, run build-wizard.ps1 instead.
@@ -64,7 +70,8 @@ param(
     [string]$GateRequestContact  = '',
     [string]$CertPath            = '',
     [string]$CertPassword        = '',
-    [string]$Tenant              = ''
+    [string]$Tenant              = '',
+    [switch]$ConfigOnly
 )
 
 Set-StrictMode -Version Latest
@@ -75,24 +82,35 @@ $outDir = Join-Path $root 'build\output'
 $outExe = Join-Path $outDir 'SP-MembershipManager.exe'
 $proj   = Join-Path $root 'launcher\Launcher.csproj'
 
+. (Join-Path $root 'build-lib.ps1')
+
+# Validate all-or-nothing / both-or-neither parameter rules (cert + gate).
+Assert-BuildParams -CertPath $CertPath -CertPassword $CertPassword -Tenant $Tenant `
+                   -GateClientId $GateClientId -GateGroupId $GateGroupId
+
+# Build the per-client config (or $null for a plain build).
+$cfg = New-ClientConfig `
+    -LockedAdminUrl $LockedAdminUrl -CriticalSiteUrls $CriticalSiteUrls `
+    -CriticalSiteGroupId $CriticalSiteGroupId -GateClientId $GateClientId `
+    -GateGroupId $GateGroupId -GateRequestContact $GateRequestContact `
+    -CertPath $CertPath -CertPassword $CertPassword -Tenant $Tenant
+
+# Dry run: write the generated config for inspection and stop before compiling.
+if ($ConfigOnly) {
+    New-Item -ItemType Directory -Force -Path $outDir | Out-Null
+    $previewPath = Join-Path $outDir 'client-config.preview.json'
+    if ($null -ne $cfg) {
+        $cfg | ConvertTo-Json | Set-Content $previewPath -Encoding UTF8
+        Write-Host "ConfigOnly: wrote $previewPath" -ForegroundColor Cyan
+    } else {
+        if (Test-Path $previewPath) { Remove-Item $previewPath -Force }
+        Write-Host 'ConfigOnly: no per-client config for these parameters (plain build).' -ForegroundColor Yellow
+    }
+    return
+}
+
 if (-not (Get-Command dotnet -ErrorAction SilentlyContinue)) {
     throw 'dotnet not found. Install the .NET 8 SDK from https://dotnet.microsoft.com/download'
-}
-
-# Validate cert params: all-or-nothing
-if ($CertPath -and (-not $CertPassword -or -not $Tenant)) {
-    throw '-CertPath requires both -CertPassword and -Tenant to be specified.'
-}
-if ($CertPath -and -not (Test-Path $CertPath)) {
-    throw "Certificate file not found: $CertPath"
-}
-
-# Validate gate params: both-or-neither. A half-configured gate bakes a broken
-# EXE that fails at startup, so reject it at build time instead.
-if ([bool]$GateClientId -ne [bool]$GateGroupId) {
-    $have = if ($GateClientId) { '-GateClientId' } else { '-GateGroupId' }
-    $need = if ($GateClientId) { '-GateGroupId' } else { '-GateClientId' }
-    throw "$have was supplied without $need. The sign-in gate requires both (or neither)."
 }
 
 # Determine whether to generate embedded resources
@@ -101,23 +119,7 @@ $embeddedCertDest = Join-Path $root 'launcher\embedded-cert.pfx'
 $wroteClientConfig = $false
 $wroteEmbeddedCert = $false
 
-$hasClientConfig = $LockedAdminUrl -or $CriticalSiteUrls.Count -gt 0 -or
-                   $CriticalSiteGroupId -or $GateClientId -or $GateGroupId -or
-                   $GateRequestContact -or $CertPath
-
-if ($hasClientConfig) {
-    $cfg = [ordered]@{
-        LockedAdminUrl      = $LockedAdminUrl
-        CriticalSiteUrls    = $CriticalSiteUrls
-        CriticalSiteGroupId = $CriticalSiteGroupId
-        GateClientId        = $GateClientId
-        GateGroupId         = $GateGroupId
-        GateRequestContact  = $GateRequestContact
-    }
-    if ($CertPath) {
-        $cfg['CertPassword'] = $CertPassword
-        $cfg['Tenant']       = $Tenant
-    }
+if ($null -ne $cfg) {
     $cfg | ConvertTo-Json | Set-Content $clientConfigDest -Encoding UTF8
     $wroteClientConfig = $true
 }
