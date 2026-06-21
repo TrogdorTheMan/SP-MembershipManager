@@ -143,8 +143,11 @@ A copy of `SP-MembershipManager.exe` is still running and is locking the output 
 **`-GateClientId was supplied without -GateGroupId…` (or vice-versa)**
 The sign-in gate needs **both** IDs or **neither**. Supply the missing one, or remove both to build without a gate.
 
+**"Windows protected your PC" appears the first time the EXE runs**
+This is SmartScreen, not an error — it shows for any unsigned EXE, especially one copied from another machine. Click **More info → Run anyway** (once per machine). Signing the EXE removes this.
+
 **Windows Defender flags the EXE after building**
-This is a known false positive for executables that embed and run scripts. See [Code Signing](README.md#code-signing) in the README for the workaround (a Defender exclusion) and the signing status.
+This is a known false positive for executables that embed and run scripts. Add a Defender exclusion for it. See [Code Signing](README.md#code-signing) in the README for both first-run prompts (SmartScreen + the antivirus exclusion) and the signing status.
 
 ---
 

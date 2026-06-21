@@ -132,9 +132,14 @@ For end-to-end behavior verification against a live tenant, see [docs/ACCEPTANCE
 
 An application for free code signing through the [SignPath Foundation](https://signpath.org) open source program was submitted on 2026-06-09 and is pending review. If approved, releases will be signed. If not, we'll figure out next steps.
 
-Until signing is in place, Windows Defender may flag the executable as a false positive. This is a known issue with executables that embed and run scripts. To work around it, add a Defender exclusion for the exe after downloading:
+Until the EXE is signed, expect **two** separate first-run prompts on a fresh machine. These are normal for any unsigned executable — not a sign of a problem:
 
-**Windows Security → Virus & threat protection → Manage settings → Add or remove exclusions → Add file → select SP-MembershipManager.exe**
+1. **SmartScreen — "Windows protected your PC."** The first time the EXE runs (especially if it was downloaded or copied from another machine), Windows shows a blue "unknown publisher" dialog. Click **More info → Run anyway**. This is per-machine and only happens once.
+2. **Defender Antivirus may flag it as a false positive.** A known issue with executables that embed and run scripts. To work around it, add a Defender exclusion:
+
+   **Windows Security → Virus & threat protection → Manage settings → Add or remove exclusions → Add file → select SP-MembershipManager.exe**
+
+Signing the EXE (once the SignPath application is approved, or with your own code-signing certificate) removes both prompts.
 
 ## License
 
