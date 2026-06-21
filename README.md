@@ -40,23 +40,31 @@ A dialog will prompt for your SharePoint Admin URL (e.g. `https://yourtenant-adm
 
 ## Building a standalone .exe
 
-Every push to `main` and every release is built automatically by GitHub Actions. Download the artifact from the [Actions tab](https://github.com/TrogdorTheMan/SP-MembershipManager/actions) or grab the `.exe` attached to any [release](https://github.com/TrogdorTheMan/SP-MembershipManager/releases).
+Builds are done **locally** — there's a point-and-click wizard (`build-wizard.ps1`) for non-developers and a scriptable `build.ps1` for everyone else. Both bake your per-client settings (locked tenant, sign-in gate, critical sites, embedded certificate) into a single EXE.
 
-To build locally, install the [.NET 8 SDK](https://dotnet.microsoft.com/download) and run:
+**See [BUILDING.md](BUILDING.md) for the full step-by-step guide**, including prerequisites, what each setting means, and troubleshooting.
+
+The quickest possible build:
 
 ```powershell
-.\build.ps1
+.\build.ps1                # plain build — needs app-config.json + .pfx alongside the EXE at runtime
+# or
+.\build-wizard.ps1         # guided GUI — recommended
 ```
 
-The compiled executable is written to `build\output\SP-MembershipManager.exe`. You will still need `app-config.json` and `sp-mm.pfx` in the same folder as the exe — see the Deploying section below. PnP.PowerShell is installed automatically on first run if not already present.
+The compiled executable is written to `build\output\SP-MembershipManager.exe`. PnP.PowerShell is installed automatically on first run if not already present.
+
+> The EXE on the GitHub **Actions tab is a gate-less build** (no sign-in restriction) and should not be distributed. Build the EXE yourself so the gate and per-client settings are baked in.
 
 ## Deploying to a new tenant
 
-Place the following three files in the same folder:
+What the client needs depends on how you built the EXE:
 
-- `SP-MembershipManager.exe` — download from the [Actions tab](https://github.com/TrogdorTheMan/SP-MembershipManager/actions) or a [release](https://github.com/TrogdorTheMan/SP-MembershipManager/releases)
-- `app-config.json` — copy from `app-config.example.json` and fill in your tenant details; the `CertificatePath` field should be the filename of your pfx (e.g. `sp-mm.pfx`)
-- `sp-mm.pfx` — the certificate for your Entra ID app registration (filename must match `CertificatePath` in `app-config.json`)
+- **Self-contained build** (built with an embedded certificate — see [BUILDING.md](BUILDING.md)): just `SP-MembershipManager.exe`. Nothing else to copy.
+- **Plain build:** place these three files in the same folder:
+  - `SP-MembershipManager.exe` — built locally (see [BUILDING.md](BUILDING.md))
+  - `app-config.json` — copy from `app-config.example.json` and fill in your tenant details; the `CertificatePath` field should be the filename of your pfx (e.g. `sp-mm.pfx`)
+  - `sp-mm.pfx` — the certificate for your Entra ID app registration (filename must match `CertificatePath` in `app-config.json`)
 
 Before first use, a Global Admin in the target tenant needs to grant consent for the app. This is a one-time step per tenant.
 
@@ -102,12 +110,22 @@ Once configured, users outside the group see a friendly Access Denied dialog (wi
 
 See [USAGE.md](USAGE.md) for day-to-day usage instructions and known behaviors.
 
+## Testing
+
+Build-time validation and per-client config generation are covered by a headless test suite that never connects to SharePoint, authenticates, or modifies any user:
+
+```powershell
+Invoke-Pester -Path .\tests\build.Tests.ps1 -Output Detailed   # requires Pester 5+
+```
+
+For end-to-end behavior verification against a live tenant, see [docs/ACCEPTANCE-TESTS.md](docs/ACCEPTANCE-TESTS.md), where each test is tagged automated (🟢) or manual (🔴).
+
 ## Roadmap
 
 - **First-run consent flow** *(done)* — the tool detects missing admin consent, opens the consent page automatically, and relaunches after approval
 - **Critical site flagging** *(done)* — critical sites render with a red background; users not in the designated power-user group have Add/Remove disabled on those rows
 - **Per-client build config** *(done)* — `build.ps1` accepts per-client parameters (locked admin URL, critical sites, gate config, embedded certificate); `build-wizard.ps1` provides a GUI for non-developers
-- **Security distribution guidance** *(planned)* — add a note to the README and build instructions warning that a per-client EXE with an embedded certificate is as sensitive as the PFX itself and must not be distributed over insecure channels such as email
+- **Security distribution guidance** *(done)* — [BUILDING.md](BUILDING.md) warns that a per-client EXE with an embedded certificate is as sensitive as the PFX itself and must not be distributed over insecure channels such as email
 - **Admin URL validation** — clicking Continue on the admin URL prompt with no input currently closes the app silently; will show a validation message instead
 
 ## Code Signing
