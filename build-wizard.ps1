@@ -15,50 +15,79 @@ Add-Type -AssemblyName System.Drawing
 
 $root = $PSScriptRoot
 
+[System.Windows.Forms.Application]::EnableVisualStyles()
+
+# --- Layout constants ---
+$pad     = 16                        # window edge padding
+$lblW    = 150                       # label column width
+$browseW = 84                        # Browse... button width
+$fullW   = 490                       # input column width
+$ctlW    = $fullW - $browseW - 6     # input width when a button sits beside it
+$gap     = 8                         # vertical gap between rows
+$secGap  = 14                        # extra gap above section headers
+$clientW = $pad + $lblW + 8 + $fullW + $pad
+
 $form                  = New-Object System.Windows.Forms.Form
 $form.Text             = "SP-MembershipManager Build Wizard"
-$form.Size             = New-Object System.Drawing.Size(620, 660)
 $form.StartPosition    = 'CenterScreen'
-$form.FormBorderStyle  = 'FixedDialog'
-$form.MaximizeBox      = $false
-$form.MinimizeBox      = $false
+$form.FormBorderStyle  = 'Sizable'
+$form.MaximizeBox      = $true
+$form.MinimizeBox      = $true
 $form.Font             = New-Object System.Drawing.Font('Segoe UI', 9)
+$form.AutoScaleDimensions = New-Object System.Drawing.SizeF(96, 96)
+$form.AutoScaleMode    = [System.Windows.Forms.AutoScaleMode]::Dpi
+$form.ClientSize       = New-Object System.Drawing.Size($clientW, 700)   # height finalized after layout
 
-$pad  = 16
-$lblW = 160
-$ctlW = 390
-$row  = 0
+# Vertical layout cursor: every row/section advances $script:y, so the form
+# height is derived from the content instead of hand-counted row math.
+$script:y = $pad
+
+function Add-Section {
+    param([string]$Title)
+    if ($script:y -gt $pad) { $script:y += $secGap }
+    $lbl          = New-Object System.Windows.Forms.Label
+    $lbl.Text     = $Title
+    $lbl.Font     = New-Object System.Drawing.Font('Segoe UI', 9, [System.Drawing.FontStyle]::Bold)
+    $lbl.Location = New-Object System.Drawing.Point($pad, $script:y)
+    $lbl.AutoSize = $true
+    $form.Controls.Add($lbl)
+    $script:y += 26
+}
 
 function Add-Row {
-    param([string]$Label, [System.Windows.Forms.Control]$Control, [int]$Height = 26)
-    $y = $pad + $row * 38
+    param([string]$Label, [System.Windows.Forms.Control]$Control, [int]$Height = 26, [int]$Width = -1)
+    if ($Width -lt 0) { $Width = $fullW }
     $lbl          = New-Object System.Windows.Forms.Label
     $lbl.Text     = $Label
-    $lbl.Location = New-Object System.Drawing.Point($pad, ($y + 4))
+    $lbl.Location = New-Object System.Drawing.Point($pad, ($script:y + 4))
     $lbl.Size     = New-Object System.Drawing.Size($lblW, 20)
-    $Control.Location = New-Object System.Drawing.Point(($pad + $lblW), $y)
-    $Control.Size     = New-Object System.Drawing.Size($ctlW, $Height)
+    $Control.Location = New-Object System.Drawing.Point(($pad + $lblW + 8), $script:y)
+    $Control.Size     = New-Object System.Drawing.Size($Width, $Height)
+    $Control.Anchor   = [System.Windows.Forms.AnchorStyles]::Top -bor
+                        [System.Windows.Forms.AnchorStyles]::Left -bor
+                        [System.Windows.Forms.AnchorStyles]::Right
+    if ($Control -is [System.Windows.Forms.TextBox]) {
+        # WinForms doesn't always repaint PlaceholderText when focus leaves an
+        # empty field; force a repaint so the hint reappears.
+        $Control.Add_LostFocus({ param($s, $e) $s.Invalidate() })
+    }
     $form.Controls.AddRange(@($lbl, $Control))
-    $script:row++
+    $script:y += $Height + $gap
 }
 
 # --- Certificate section ---
-$lblCertSection          = New-Object System.Windows.Forms.Label
-$lblCertSection.Text     = "Certificate (embed in EXE for zero-config deployment)"
-$lblCertSection.Font     = New-Object System.Drawing.Font('Segoe UI', 9, [System.Drawing.FontStyle]::Bold)
-$lblCertSection.Location = New-Object System.Drawing.Point($pad, $pad)
-$lblCertSection.Size     = New-Object System.Drawing.Size(560, 20)
-$form.Controls.Add($lblCertSection)
-$row = 1
+Add-Section "Certificate (embed in EXE for zero-config deployment)"
 
+$certRowY = $script:y
 $txtCertPath = New-Object System.Windows.Forms.TextBox
 $txtCertPath.PlaceholderText = "Leave blank to require app-config.json at runtime"
-Add-Row "Certificate (.pfx)" $txtCertPath
+Add-Row "Certificate (.pfx)" $txtCertPath -Width $ctlW
 
 $btnBrowseCert = New-Object System.Windows.Forms.Button
 $btnBrowseCert.Text     = "Browse..."
-$btnBrowseCert.Size     = New-Object System.Drawing.Size(80, 26)
-$btnBrowseCert.Location = New-Object System.Drawing.Point(($pad + $lblW + $ctlW + 6), ($pad + 1 * 38 + $pad))
+$btnBrowseCert.Size     = New-Object System.Drawing.Size($browseW, 26)
+$btnBrowseCert.Location = New-Object System.Drawing.Point(($pad + $lblW + 8 + $ctlW + 6), $certRowY)
+$btnBrowseCert.Anchor   = [System.Windows.Forms.AnchorStyles]::Top -bor [System.Windows.Forms.AnchorStyles]::Right
 $btnBrowseCert.Add_Click({
     $dlg = New-Object System.Windows.Forms.OpenFileDialog
     $dlg.Filter = "PFX Certificate (*.pfx)|*.pfx"
@@ -76,26 +105,14 @@ $txtTenant.PlaceholderText = "contoso.onmicrosoft.com  (required if certificate 
 Add-Row "Tenant" $txtTenant
 
 # --- Tenant lock section ---
-$lblLockSection          = New-Object System.Windows.Forms.Label
-$lblLockSection.Text     = "Tenant Lock"
-$lblLockSection.Font     = New-Object System.Drawing.Font('Segoe UI', 9, [System.Drawing.FontStyle]::Bold)
-$lblLockSection.Location = New-Object System.Drawing.Point($pad, ($pad + $row * 38 + 4))
-$lblLockSection.Size     = New-Object System.Drawing.Size(560, 20)
-$form.Controls.Add($lblLockSection)
-$row++
+Add-Section "Tenant Lock"
 
 $txtLockedAdminUrl = New-Object System.Windows.Forms.TextBox
 $txtLockedAdminUrl.PlaceholderText = "https://contoso-admin.sharepoint.com  (optional)"
 Add-Row "Locked Admin URL" $txtLockedAdminUrl
 
 # --- Gate section ---
-$lblGateSection          = New-Object System.Windows.Forms.Label
-$lblGateSection.Text     = "Sign-In Gate (overrides app-config.json)"
-$lblGateSection.Font     = New-Object System.Drawing.Font('Segoe UI', 9, [System.Drawing.FontStyle]::Bold)
-$lblGateSection.Location = New-Object System.Drawing.Point($pad, ($pad + $row * 38 + 4))
-$lblGateSection.Size     = New-Object System.Drawing.Size(560, 20)
-$form.Controls.Add($lblGateSection)
-$row++
+Add-Section "Sign-In Gate (overrides app-config.json)"
 
 $txtGateClientId = New-Object System.Windows.Forms.TextBox
 $txtGateClientId.PlaceholderText = "Application (client) ID of the gate app registration"
@@ -110,13 +127,7 @@ $txtGateRequestContact.PlaceholderText = "Email or URL shown on Access Denied di
 Add-Row "Request Access Contact" $txtGateRequestContact
 
 # --- Critical sites section ---
-$lblCritSection          = New-Object System.Windows.Forms.Label
-$lblCritSection.Text     = "Critical Sites"
-$lblCritSection.Font     = New-Object System.Drawing.Font('Segoe UI', 9, [System.Drawing.FontStyle]::Bold)
-$lblCritSection.Location = New-Object System.Drawing.Point($pad, ($pad + $row * 38 + 4))
-$lblCritSection.Size     = New-Object System.Drawing.Size(560, 20)
-$form.Controls.Add($lblCritSection)
-$row++
+Add-Section "Critical Sites"
 
 $txtCriticalSiteGroupId = New-Object System.Windows.Forms.TextBox
 $txtCriticalSiteGroupId.PlaceholderText = "Entra group object ID — members may manage critical sites"
@@ -126,33 +137,35 @@ $txtCriticalSiteUrls          = New-Object System.Windows.Forms.TextBox
 $txtCriticalSiteUrls.Multiline = $true
 $txtCriticalSiteUrls.ScrollBars = 'Vertical'
 $txtCriticalSiteUrls.PlaceholderText = "One SharePoint site URL per line"
-Add-Row "Critical Site URLs" $txtCriticalSiteUrls 60
-$row++   # extra row for the taller text area
+Add-Row "Critical Site URLs" $txtCriticalSiteUrls 56
 
 # --- Output section ---
-$lblOutput          = New-Object System.Windows.Forms.Label
-$lblOutput.Text     = "Build Output"
-$lblOutput.Font     = New-Object System.Drawing.Font('Segoe UI', 9, [System.Drawing.FontStyle]::Bold)
-$lblOutput.Location = New-Object System.Drawing.Point($pad, ($pad + $row * 38 + 4))
-$lblOutput.Size     = New-Object System.Drawing.Size(560, 20)
-$form.Controls.Add($lblOutput)
-$row++
+Add-Section "Build Output"
 
 $rtbOutput          = New-Object System.Windows.Forms.RichTextBox
 $rtbOutput.ReadOnly = $true
 $rtbOutput.BackColor = [System.Drawing.Color]::FromArgb(30, 30, 30)
 $rtbOutput.ForeColor = [System.Drawing.Color]::LightGreen
-$rtbOutput.Font      = New-Object System.Drawing.Font('Consolas', 8)
-$rtbOutput.Location  = New-Object System.Drawing.Point($pad, ($pad + $row * 38))
-$rtbOutput.Size      = New-Object System.Drawing.Size(($form.ClientSize.Width - $pad * 2), 80)
+$rtbOutput.Font      = New-Object System.Drawing.Font('Consolas', 9)
+$rtbOutput.Location  = New-Object System.Drawing.Point($pad, $script:y)
+$rtbOutput.Size      = New-Object System.Drawing.Size(($clientW - $pad * 2), 120)
+$rtbOutput.Anchor    = [System.Windows.Forms.AnchorStyles]::Top -bor
+                       [System.Windows.Forms.AnchorStyles]::Bottom -bor
+                       [System.Windows.Forms.AnchorStyles]::Left -bor
+                       [System.Windows.Forms.AnchorStyles]::Right
 $form.Controls.Add($rtbOutput)
+$script:y += 120 + $gap + 4
 
 $btnBuild          = New-Object System.Windows.Forms.Button
 $btnBuild.Text     = "Build"
 $btnBuild.Size     = New-Object System.Drawing.Size(100, 30)
-$btnBuild.Location = New-Object System.Drawing.Point(($form.ClientSize.Width - $pad - 100), ($form.ClientSize.Height - $pad - 30))
+$btnBuild.Location = New-Object System.Drawing.Point(($clientW - $pad - 100), $script:y)
 $btnBuild.Anchor   = [System.Windows.Forms.AnchorStyles]::Bottom -bor [System.Windows.Forms.AnchorStyles]::Right
 $form.Controls.Add($btnBuild)
+
+$form.ClientSize   = New-Object System.Drawing.Size($clientW, ($script:y + 30 + $pad))
+# Don't let the window shrink below the fully laid-out size.
+$form.MinimumSize  = $form.Size
 
 $btnBuild.Add_Click({
     $rtbOutput.Clear()
