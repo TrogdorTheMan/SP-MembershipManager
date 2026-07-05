@@ -154,6 +154,7 @@ without running `dotnet publish`.
 1. Launch the EXE.
 
 **Pass:** Error dialog on startup: *"GateClientId is configured but GateGroupId is missing."* App does not continue. (This guard covers configs that bypass `build.ps1`.)
+- 07-05-26: Passes. Error dialog shown on launch with hand-edited half-gate config; app exits before any connection. (Bonus: bare EXE with no app-config.json correctly shows the "Configuration Missing" dialog.)
 
 ---
 
@@ -179,3 +180,4 @@ without running `dotnet publish`.
    - **Pass:** Warning dialog: *"This build has NO sign-in gate..."* with Yes/No. Clicking **No** cancels; clicking **Yes** proceeds with a gate-less build.
 4. Fill in both gate fields. Click **Build**.
    - **Pass:** Build runs with no validation prompts.
+- 07-05-26: Passes — half-gate validation error, no-gate warning with No cancelling, and Yes proceeding with a gate-less build all confirmed. (Same day: wizard layout rebuilt — window now sizes to content, DPI-aware, resizable with anchored controls.)

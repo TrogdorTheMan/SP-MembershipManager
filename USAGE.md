@@ -9,7 +9,7 @@ This guide covers day-to-day usage and known behaviors to be aware of when manag
 3. Enter your SharePoint Admin URL (e.g. `https://yourtenant-admin.sharepoint.com`) and click **Connect**
 4. Search for an employee by name or email in the left panel
 5. Select them from the results list — the tool will scan all sites and show every site they have access to and what role they hold
-6. Use **Add to Site** or **Remove from Site** to make changes
+6. Use **Add direct member access** or **Remove direct member access** to make changes
 
 ## Known Behaviors
 
@@ -33,6 +33,8 @@ The grid includes an **Access** column that shows how a user's access was grante
 - When a user has both a direct entry and group-based access on the same site, the Access column shows the group name and the **Direct & Group** column shows ✓; these rows are highlighted in blue
 
 Rows highlighted in **amber** indicate site collection administrators.
+
+Rows highlighted in **light red** are critical sites designated when the tool was built (e.g. HR or Finance). If the Add/Remove buttons are disabled on a red row with a note saying *"This is a critical site — contact an administrator to manage access"*, access to that site is restricted to a designated admin group and you'll need to contact whoever provided the tool.
 
 You can only remove access that is directly assigned. If the Access column shows only group or admin sources, the Remove button will be disabled. To remove group-based access, the security group membership itself needs to change.
 
