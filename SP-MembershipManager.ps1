@@ -1,4 +1,4 @@
-#Requires -Version 5.1
+#Requires -Version 7.0
 
 <#
 .SYNOPSIS
@@ -31,6 +31,8 @@ param(
 
 Set-StrictMode -Version Latest
 $ErrorActionPreference = 'Stop'
+
+$script:AppVersion = '1.0.0'
 
 # ---------------------------------------------------------------------------
 # Dependencies
@@ -1253,7 +1255,7 @@ function Show-AboutDialog {
     $about.MinimizeBox     = $false
 
     $lblName = New-Object System.Windows.Forms.Label
-    $lblName.Text      = "SP Membership Manager"
+    $lblName.Text      = "SP Membership Manager v$script:AppVersion"
     $lblName.Font      = New-Object System.Drawing.Font('Segoe UI', 11, [System.Drawing.FontStyle]::Bold)
     $lblName.Location  = New-Object System.Drawing.Point(20, 20)
     $lblName.AutoSize  = $true
@@ -1954,6 +1956,8 @@ function Show-MainForm {
 # ---------------------------------------------------------------------------
 # Entry point
 # ---------------------------------------------------------------------------
+
+Write-Log "SP-MembershipManager v$script:AppVersion starting." | Out-Null
 
 Ensure-PnPModule
 
