@@ -79,7 +79,7 @@ This is the identity the tool signs in as.
    - **Redirect URI:** leave blank for now.
 4. Click **Register.**
 5. On the app's **Overview** page, copy the **Application (client) ID** — you'll need it in
-   Step 5. This is a GUID like `630f7dac-df2b-4586-a6b4-e83acbf4e91e`.
+   Step 5. This is a GUID like `00000000-1111-2222-3333-444444444444`.
 
 ### Add the API permissions
 
