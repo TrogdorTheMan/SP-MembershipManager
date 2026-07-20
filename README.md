@@ -22,6 +22,10 @@ A Windows GUI tool that lets authorized users manage SharePoint Online site memb
 
 No SharePoint Administrator role is required for the end user running the tool. Authentication is handled via an app-only service principal with pre-granted permissions.
 
+## Setting up for a tenant
+
+New to the project and want it running against your tenant? **[SETUP.md](SETUP.md)** is the full step-by-step guide — creating your own Entra ID app registration, generating the certificate, granting consent, and filling in the config, with the exact portal clicks and commands. It also has a shorter path for deploying to an additional tenant once the app registration already exists.
+
 Startup shows a loading screen while the tool connects and fetches the site list in the background, so the main window opens ready to use.
 
 The certificate password in `app-config.json` is encrypted with Windows DPAPI on first run and replaced with a ciphertext blob. The plaintext password never persists on disk after that point. Encryption is tied to the Windows user account that performed the first run — the password cannot be decrypted by a different user or on a different machine.
@@ -79,6 +83,8 @@ They will see a consent prompt listing the permissions the app is requesting (Sh
 > **Existing tenants:** if you previously consented before `GroupMember.Read.All` was added, have the Global Admin visit the consent URL again to grant the new permission. The tool will still work without it — group-based access just won't appear in results.
 
 ## Using your own app registration
+
+> For the full hand-held walkthrough of everything in this section — app registration, certificate, consent, and config — see **[SETUP.md](SETUP.md) Part A**. The summary below is the quick reference.
 
 If you fork this repo, you can substitute your own multi-tenant Entra ID app registration. Register an app at [portal.azure.com](https://portal.azure.com) with:
 
