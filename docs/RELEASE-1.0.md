@@ -30,6 +30,22 @@ Working notes for shipping v1.0.0. Delete this file once the release is tagged.
 - [ ] Optional: GitHub Release from the tag — **source/tag only**; never attach a configured EXE (they bake tenant config and certs)
 - [ ] Delete this file
 
+## Migration (breaking change — include in the GitHub Release notes)
+
+**`AppClientId` is now required in `app-config.json`.** The tool no longer ships a hardcoded
+app registration client ID in source — each deployer supplies their own, so a personal/default
+identity is never inherited. On startup the tool now refuses to run (friendly dialog) if no
+client ID is configured.
+
+Upgrading an existing deployment:
+
+- **From-source / plain builds:** add `"AppClientId": "<your-app-registration-client-id>"` to
+  each `app-config.json` (see `app-config.example.json`). Nothing else changes.
+- **Self-contained (embedded-cert) EXEs:** rebuild with the new required `-AppClientId`
+  parameter — `build.ps1 -CertPath … -CertPassword … -Tenant … -AppClientId …` (or the new
+  **App Client ID** box in the build wizard). Older self-contained EXEs won't carry the value.
+- Setup for a fresh tenant is now code-edit-free — see **SETUP.md**.
+
 ## Notes
 
 - Test personas needed: power user (gate + critical group), standard user (gate only), outsider (neither)
