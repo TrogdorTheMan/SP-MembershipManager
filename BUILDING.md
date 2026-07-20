@@ -70,6 +70,7 @@ To bake in per-client settings, add parameters:
     -CertPath ".\sp-mm.pfx" `
     -CertPassword "your-pfx-password" `
     -Tenant "contoso.onmicrosoft.com" `
+    -AppClientId "<your-app-registration-client-id>" `
     -LockedAdminUrl "https://contoso-admin.sharepoint.com" `
     -GateClientId "<gate-app-client-id>" `
     -GateGroupId  "<entra-group-object-id>"
@@ -80,9 +81,10 @@ To bake in per-client settings, add parameters:
 | Parameter | What it does | Example |
 |-----------|--------------|---------|
 | `-LockedAdminUrl` | Pre-fills **and locks** the SharePoint admin URL so the user can't point the tool at a different tenant. | `https://contoso-admin.sharepoint.com` |
-| `-CertPath` | Embeds the `.pfx` certificate **inside the EXE** so no external cert file is needed. Requires `-CertPassword` and `-Tenant`. | `.\sp-mm.pfx` |
+| `-CertPath` | Embeds the `.pfx` certificate **inside the EXE** so no external cert file is needed. Requires `-CertPassword`, `-Tenant`, and `-AppClientId`. | `.\sp-mm.pfx` |
 | `-CertPassword` | The password for that `.pfx`. Required when `-CertPath` is set. | `"s3cret"` |
 | `-Tenant` | Your tenant name. Required when `-CertPath` is set. | `contoso.onmicrosoft.com` |
+| `-AppClientId` | Application (client) ID of your Entra app registration the tool signs in as. Required when `-CertPath` is set (a self-contained EXE has no `app-config.json` to read it from). Plain builds read it from `app-config.json` instead. | `<client-id-guid>` |
 | `-GateClientId` | Client ID of the sign-in-gate app registration. **Must be paired with `-GateGroupId`.** | `f4840136-…` |
 | `-GateGroupId` | Object ID of the Entra group allowed to use the tool. **Must be paired with `-GateClientId`.** | `0b654d3a-…` |
 | `-GateRequestContact` | Email or URL shown on the *Access Denied* dialog so a blocked user can request access. | `it-help@contoso.com` |
@@ -96,7 +98,7 @@ To bake in per-client settings, add parameters:
 
 ## What each setting means
 
-**Certificate (embed in EXE)** — Normally the EXE reads its certificate from a `.pfx` file placed next to it. If you supply the certificate at build time (`-CertPath` + `-CertPassword` + `-Tenant`, or the Certificate boxes in the wizard), the cert is baked **inside** the EXE and the client gets a single self-contained file with nothing else to copy. Convenient — but see the [security note](#security-the-embedded-certificate-build).
+**Certificate (embed in EXE)** — Normally the EXE reads its certificate (and its app registration client ID) from `app-config.json` placed next to it. If you supply the certificate at build time (`-CertPath` + `-CertPassword` + `-Tenant` + `-AppClientId`, or the Certificate boxes in the wizard), the cert is baked **inside** the EXE and the client gets a single self-contained file with nothing else to copy. Because there's no `app-config.json` at runtime, `-AppClientId` is required here so the EXE knows which app registration to sign in as. Convenient — but see the [security note](#security-the-embedded-certificate-build).
 
 **Tenant Lock (Locked Admin URL)** — Forces the EXE to a specific tenant. The admin-URL prompt still appears at launch, but it's pre-filled and read-only, so the user can't retarget the tool somewhere else.
 

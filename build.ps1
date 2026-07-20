@@ -36,8 +36,9 @@
     Email or URL shown on the Access Denied dialog. Overrides app-config.json.
 
 .PARAMETER CertPath
-    Path to the .pfx certificate file to embed in the EXE. When set, CertPassword and
-    Tenant are also required. The resulting EXE needs no external files to run.
+    Path to the .pfx certificate file to embed in the EXE. When set, CertPassword,
+    Tenant, and AppClientId are also required. The resulting EXE needs no external
+    files to run.
     SECURITY: the private key and password are stored in the EXE binary — treat the EXE
     with the same access controls as the PFX itself.
 
@@ -46,6 +47,11 @@
 
 .PARAMETER Tenant
     Tenant name (e.g. contoso.onmicrosoft.com). Required when CertPath is set.
+
+.PARAMETER AppClientId
+    Application (client) ID of the Entra app registration the tool authenticates as.
+    Required when CertPath is set (a self-contained EXE has no app-config.json to read
+    it from). For plain builds it is supplied via app-config.json at runtime instead.
 
 .PARAMETER ConfigOnly
     Dry run: validate parameters and write the generated client-config.json to
@@ -71,6 +77,7 @@ param(
     [string]$CertPath            = '',
     [string]$CertPassword        = '',
     [string]$Tenant              = '',
+    [string]$AppClientId         = '',
     [switch]$ConfigOnly
 )
 
@@ -86,6 +93,7 @@ $proj   = Join-Path $root 'launcher\Launcher.csproj'
 
 # Validate all-or-nothing / both-or-neither parameter rules (cert + gate).
 Assert-BuildParams -CertPath $CertPath -CertPassword $CertPassword -Tenant $Tenant `
+                   -AppClientId $AppClientId `
                    -GateClientId $GateClientId -GateGroupId $GateGroupId
 
 # Build the per-client config (or $null for a plain build).
@@ -93,7 +101,8 @@ $cfg = New-ClientConfig `
     -LockedAdminUrl $LockedAdminUrl -CriticalSiteUrls $CriticalSiteUrls `
     -CriticalSiteGroupId $CriticalSiteGroupId -GateClientId $GateClientId `
     -GateGroupId $GateGroupId -GateRequestContact $GateRequestContact `
-    -CertPath $CertPath -CertPassword $CertPassword -Tenant $Tenant
+    -CertPath $CertPath -CertPassword $CertPassword -Tenant $Tenant `
+    -AppClientId $AppClientId
 
 # Dry run: write the generated config for inspection and stop before compiling.
 if ($ConfigOnly) {

@@ -33,13 +33,15 @@ function Assert-BuildParams {
         [string]$CertPath     = '',
         [string]$CertPassword = '',
         [string]$Tenant       = '',
+        [string]$AppClientId  = '',
         [string]$GateClientId = '',
         [string]$GateGroupId  = ''
     )
 
-    # Cert params: all-or-nothing
-    if ($CertPath -and (-not $CertPassword -or -not $Tenant)) {
-        throw '-CertPath requires both -CertPassword and -Tenant to be specified.'
+    # Cert params: all-or-nothing. A self-contained EXE has no app-config.json,
+    # so AppClientId must be baked in alongside the cert password and tenant.
+    if ($CertPath -and (-not $CertPassword -or -not $Tenant -or -not $AppClientId)) {
+        throw '-CertPath requires -CertPassword, -Tenant, and -AppClientId to be specified.'
     }
     if ($CertPath -and -not (Test-Path $CertPath)) {
         throw "Certificate file not found: $CertPath"
@@ -83,7 +85,8 @@ function New-ClientConfig {
         [string]$GateRequestContact  = '',
         [string]$CertPath            = '',
         [string]$CertPassword        = '',
-        [string]$Tenant              = ''
+        [string]$Tenant              = '',
+        [string]$AppClientId         = ''
     )
 
     $hasConfig = Test-HasClientConfig `
@@ -103,6 +106,7 @@ function New-ClientConfig {
     if ($CertPath) {
         $cfg['CertPassword'] = $CertPassword
         $cfg['Tenant']       = $Tenant
+        $cfg['AppClientId']  = $AppClientId
     }
     return $cfg
 }

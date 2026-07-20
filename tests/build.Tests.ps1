@@ -58,18 +58,22 @@ Describe 'Assert-BuildParams' {
     }
 
     Context 'cert rules' {
-        It 'throws when -CertPath is set without password or tenant' {
+        It 'throws when -CertPath is set without password, tenant, or client id' {
             { Assert-BuildParams -CertPath 'C:\nope.pfx' } |
-                Should -Throw '-CertPath requires both -CertPassword and -Tenant to be specified.'
+                Should -Throw '-CertPath requires -CertPassword, -Tenant, and -AppClientId to be specified.'
+        }
+        It 'throws when -CertPath has password + tenant but no -AppClientId' {
+            { Assert-BuildParams -CertPath 'C:\nope.pfx' -CertPassword 'pw' -Tenant 'contoso.onmicrosoft.com' } |
+                Should -Throw '-CertPath requires -CertPassword, -Tenant, and -AppClientId to be specified.'
         }
         It 'throws when the cert file does not exist' {
-            { Assert-BuildParams -CertPath 'C:\does-not-exist.pfx' -CertPassword 'pw' -Tenant 'contoso.onmicrosoft.com' } |
+            { Assert-BuildParams -CertPath 'C:\does-not-exist.pfx' -CertPassword 'pw' -Tenant 'contoso.onmicrosoft.com' -AppClientId 'cid' } |
                 Should -Throw 'Certificate file not found: C:\does-not-exist.pfx'
         }
-        It 'accepts a cert when the file exists and password + tenant are given' {
+        It 'accepts a cert when the file exists and password + tenant + client id are given' {
             $pfx = Join-Path $TestDrive 'cert.pfx'
             Set-Content -Path $pfx -Value 'not-a-real-cert'
-            { Assert-BuildParams -CertPath $pfx -CertPassword 'pw' -Tenant 'contoso.onmicrosoft.com' } | Should -Not -Throw
+            { Assert-BuildParams -CertPath $pfx -CertPassword 'pw' -Tenant 'contoso.onmicrosoft.com' -AppClientId 'cid' } | Should -Not -Throw
         }
     }
 }
@@ -95,17 +99,19 @@ Describe 'New-ClientConfig' {
         $cfg.GateGroupId  | Should -Be 'gid'
     }
 
-    It 'includes cert password and tenant only when -CertPath is set (AT-3)' {
-        $cfg = New-ClientConfig -CertPath 'C:\sp-mm.pfx' -CertPassword 'pw' -Tenant 'contoso.onmicrosoft.com'
+    It 'includes cert password, tenant, and client id only when -CertPath is set (AT-3)' {
+        $cfg = New-ClientConfig -CertPath 'C:\sp-mm.pfx' -CertPassword 'pw' -Tenant 'contoso.onmicrosoft.com' -AppClientId 'cid'
         $cfg.Contains('CertPassword') | Should -BeTrue
         $cfg.CertPassword | Should -Be 'pw'
         $cfg.Tenant       | Should -Be 'contoso.onmicrosoft.com'
+        $cfg.AppClientId  | Should -Be 'cid'
     }
 
     It 'omits cert fields when no cert is supplied' {
         $cfg = New-ClientConfig -LockedAdminUrl 'https://contoso-admin.sharepoint.com'
         $cfg.Contains('CertPassword') | Should -BeFalse
         $cfg.Contains('Tenant')       | Should -BeFalse
+        $cfg.Contains('AppClientId')  | Should -BeFalse
     }
 }
 

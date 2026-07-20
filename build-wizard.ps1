@@ -104,6 +104,10 @@ $txtTenant = New-Object System.Windows.Forms.TextBox
 $txtTenant.PlaceholderText = "contoso.onmicrosoft.com  (required if certificate is specified)"
 Add-Row "Tenant" $txtTenant
 
+$txtAppClientId = New-Object System.Windows.Forms.TextBox
+$txtAppClientId.PlaceholderText = "App registration (client) ID  (required if certificate is specified)"
+Add-Row "App Client ID" $txtAppClientId
+
 # --- Tenant lock section ---
 Add-Section "Tenant Lock"
 
@@ -170,10 +174,11 @@ $form.MinimumSize  = $form.Size
 $btnBuild.Add_Click({
     $rtbOutput.Clear()
 
-    # Validate cert params
-    if ($txtCertPath.Text.Trim() -and (-not $txtCertPassword.Text -or -not $txtTenant.Text.Trim())) {
+    # Validate cert params. A self-contained EXE has no app-config.json at runtime,
+    # so App Client ID must be supplied alongside the cert password and tenant.
+    if ($txtCertPath.Text.Trim() -and (-not $txtCertPassword.Text -or -not $txtTenant.Text.Trim() -or -not $txtAppClientId.Text.Trim())) {
         [System.Windows.Forms.MessageBox]::Show(
-            "Certificate Password and Tenant are required when a certificate is specified.",
+            "Certificate Password, Tenant, and App Client ID are required when a certificate is specified.",
             "Validation Error", 'OK', 'Error') | Out-Null
         return
     }
@@ -203,6 +208,7 @@ $btnBuild.Add_Click({
     if ($txtCertPath.Text.Trim())            { $params['CertPath']            = $txtCertPath.Text.Trim() }
     if ($txtCertPassword.Text)               { $params['CertPassword']        = $txtCertPassword.Text }
     if ($txtTenant.Text.Trim())              { $params['Tenant']              = $txtTenant.Text.Trim() }
+    if ($txtAppClientId.Text.Trim())         { $params['AppClientId']         = $txtAppClientId.Text.Trim() }
     if ($txtLockedAdminUrl.Text.Trim())      { $params['LockedAdminUrl']      = $txtLockedAdminUrl.Text.Trim() }
     if ($txtGateClientId.Text.Trim())        { $params['GateClientId']        = $txtGateClientId.Text.Trim() }
     if ($txtGateGroupId.Text.Trim())         { $params['GateGroupId']         = $txtGateGroupId.Text.Trim() }

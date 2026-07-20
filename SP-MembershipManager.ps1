@@ -103,15 +103,15 @@ function Unprotect-String {
 # ---------------------------------------------------------------------------
 # App registration
 #
-# Client ID is public and safe to commit. The client secret is loaded from a
-# local config file (app-config.json) that is gitignored and must be created
-# before running. See README for setup instructions.
-#
-# If you fork this repo, replace AppClientId with your own app registration
-# and create your own app-config.json with your secret.
+# No app identity ships in this source. Each deployer supplies their own Entra
+# app registration: AppClientId comes from app-config.json (gitignored, created
+# per setup) for plain/from-source runs, or is baked in per-build via
+# build.ps1 -AppClientId for a self-contained EXE. A client ID is a public
+# identifier, not a secret; the private key (the PFX) is the sensitive part and
+# never lives in source. See SETUP.md.
 # ---------------------------------------------------------------------------
 
-$script:AppClientId       = "630f7dac-df2b-4586-a6b4-e83acbf4e91e"
+$script:AppClientId       = ""
 $script:TenantName        = ""
 $script:CertPath          = ""
 $script:CertPassword      = $null
@@ -179,6 +179,16 @@ function Load-AppConfig {
                 "Configuration Error", 'OK', 'Error') | Out-Null
             exit
         }
+        # AppClientId identifies your Entra app registration. Read with the
+        # PSObject guard (older configs won't have the key) and require it.
+        $appClientId = if ($cfg.PSObject.Properties.Item('AppClientId')) { [string]$cfg.AppClientId } else { '' }
+        if (-not $appClientId) {
+            [System.Windows.Forms.MessageBox]::Show(
+                "app-config.json is missing AppClientId (your Entra app registration's Application (client) ID).`n`nSee SETUP.md for how to create the app registration and where to find this value.",
+                "Configuration Error", 'OK', 'Error') | Out-Null
+            exit
+        }
+        $script:AppClientId = $appClientId
         $certPath = $cfg.CertificatePath
         if (-not [System.IO.Path]::IsPathRooted($certPath)) {
             $certPath = Join-Path $script:ScriptRoot $certPath
@@ -249,6 +259,7 @@ function Load-ClientConfig {
     try { $cfg = Get-Content $Path -Raw | ConvertFrom-Json }
     catch { Write-Log "client-config.json parse error: $_" | Out-Null; return }
 
+    if ($cfg.PSObject.Properties.Item('AppClientId')         -and $cfg.AppClientId)         { $script:AppClientId         = [string]$cfg.AppClientId }
     if ($cfg.PSObject.Properties.Item('LockedAdminUrl')      -and $cfg.LockedAdminUrl)      { $script:LockedAdminUrl      = [string]$cfg.LockedAdminUrl }
     if ($cfg.PSObject.Properties.Item('CriticalSiteUrls')    -and $cfg.CriticalSiteUrls)    { $script:CriticalSiteUrls    = @($cfg.CriticalSiteUrls) }
     if ($cfg.PSObject.Properties.Item('CriticalSiteGroupId') -and $cfg.CriticalSiteGroupId) { $script:CriticalSiteGroupId = [string]$cfg.CriticalSiteGroupId }
@@ -1965,6 +1976,16 @@ Add-Type -AssemblyName System.Windows.Forms
 
 Load-AppConfig -SkipCertValidation ($EmbeddedCert -ne '')
 Load-ClientConfig -Path $ClientConfig -EmbeddedCertPath $EmbeddedCert
+
+# AppClientId must be present after both config sources merge. The plain path
+# validates it in Load-AppConfig; this guard also covers a self-contained EXE
+# whose baked config somehow shipped without it.
+if (-not $script:AppClientId) {
+    [System.Windows.Forms.MessageBox]::Show(
+        "No app registration is configured (AppClientId is empty).`n`nSet AppClientId in app-config.json, or rebuild the EXE with build.ps1 -AppClientId. See SETUP.md.",
+        "Configuration Error", 'OK', 'Error') | Out-Null
+    exit
+}
 
 # Re-validate gate config after merging app-config.json and client-config.json.
 # Catches half-configs where one key came from each source.

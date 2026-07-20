@@ -1,4 +1,5 @@
 {
+  "AppClientId": "your-app-client-id-here",
   "CertificatePath": ".\\sp-mm.pfx",
   "CertificatePassword": "YOUR_CERT_PASSWORD_HERE",
   "CertificatePasswordEncrypted": false,

@@ -45,7 +45,7 @@ You need these on your machine:
 |-------------|--------------|---------------|
 | **Windows 10 or 11** | You're on it | — |
 | **PowerShell 7+** | `pwsh --version` | [Install PowerShell 7](https://learn.microsoft.com/powershell/scripting/install/installing-powershell-on-windows) |
-| **A Global Administrator** in the target tenant | You, or someone who can click "Accept" once | Needed for the one-time consent step (Step 8) |
+| **A Global Administrator** in the target tenant | You, or someone who can click "Accept" once | Needed for the one-time consent step (Step 6) |
 
 You do **not** need the .NET SDK for this guide — that's only for building the EXE
 ([BUILDING.md](BUILDING.md)).
@@ -96,12 +96,12 @@ The tool needs read/write access to SharePoint and read access to users and grou
    | **Microsoft Graph** | `GroupMember.Read.All` |
 
 7. Don't click "Grant admin consent" here yet — you'll do the consent step properly in
-   **Step 8** (it's the same thing, but the tool gives you a link that lands on a friendly
+   **Step 6** (it's the same thing, but the tool gives you a link that lands on a friendly
    confirmation page).
 
 ### Register the consent redirect URI
 
-The consent step (Step 8) sends the admin to a small "you're all set" web page after they
+The consent step (Step 6) sends the admin to a small "you're all set" web page after they
 approve. That page's address has to be registered on your app or Entra will reject the
 redirect.
 
@@ -156,25 +156,10 @@ files in the project folder:
 2. Select the **`sp-mm.cer`** file (the public one — never upload the `.pfx`).
 3. Add a description like `Created 2026-07` and click **Add.**
 
-## Step 5 — Point the tool at your app registration
+## Step 5 — Fill in `app-config.json`
 
-Open `SP-MembershipManager.ps1` and find this line near the top (around line 114):
-
-```powershell
-$script:AppClientId       = "630f7dac-df2b-4586-a6b4-e83acbf4e91e"
-```
-
-Replace the GUID with **your** Application (client) ID from Step 2:
-
-```powershell
-$script:AppClientId       = "<your-application-client-id>"
-```
-
-Save the file.
-
-## Step 6 — Fill in `app-config.json`
-
-Copy the example and open the copy:
+This is where you point the tool at **your** app registration and tenant — no code editing
+required. Copy the example and open the copy:
 
 ```powershell
 Copy-Item app-config.example.json app-config.json
@@ -185,6 +170,7 @@ the optional sign-in gate, covered at the end):
 
 ```json
 {
+  "AppClientId": "<your-application-client-id>",
   "CertificatePath": ".\\sp-mm.pfx",
   "CertificatePassword": "the-password-you-chose-in-step-3",
   "CertificatePasswordEncrypted": false,
@@ -195,6 +181,9 @@ the optional sign-in gate, covered at the end):
 }
 ```
 
+- **`AppClientId`** — the **Application (client) ID** you copied in Step 2. This is what makes
+  the tool sign in as *your* app registration. (It ships empty; the tool won't run until you
+  set it.)
 - **`CertificatePath`** — path to your `.pfx`. `.\sp-mm.pfx` is right if it's in the same
   folder.
 - **`CertificatePassword`** — the plaintext password from Step 3. This is temporary: on the
@@ -203,11 +192,11 @@ the optional sign-in gate, covered at the end):
   never stays on disk.
 - **`Tenant`** — your tenant, e.g. `contoso.onmicrosoft.com`.
 
-## Step 7 — Grant admin consent
+## Step 6 — Grant admin consent
 
 The app needs a one-time approval so it's allowed to use those permissions in the tenant.
 
-The easiest way: launch the tool (Step 8). If consent is missing, it detects that, opens the
+The easiest way: launch the tool (Step 7). If consent is missing, it detects that, opens the
 consent page in your browser automatically, and offers a **Relaunch** button once you're done.
 
 If you'd rather do it up front, have a **Global Admin** open this URL (swap in **your** client
@@ -221,7 +210,7 @@ They'll see the list of permissions (SharePoint read/write, basic user + group r
 they click **Accept**, they land on the confirmation page and you're done — this holds for
 everyone in the tenant, no per-user setup.
 
-## Step 8 — Run it
+## Step 7 — Run it
 
 ```powershell
 .\SP-MembershipManager.ps1
@@ -246,8 +235,8 @@ Global Admin in that tenant grants consent once, and (2) a config file pointing 
 ## Step 1 — Grant admin consent in the new tenant
 
 A **Global Admin of the target tenant** opens this URL and signs in (swap in the Application
-(client) ID of your app registration — the same one set as `$script:AppClientId` in
-`SP-MembershipManager.ps1`):
+(client) ID of your app registration — the same `AppClientId` you set in `app-config.json`, or
+baked into the EXE with `build.ps1 -AppClientId`):
 
 ```
 https://login.microsoftonline.com/common/adminconsent?client_id=<your-application-client-id>&redirect_uri=https://trogdortheman.github.io/SP-MembershipManager/consent-complete.html
@@ -266,8 +255,8 @@ only tenant-side action needed.
 How the client gets configured depends on how you're delivering the tool:
 
 - **Running from source or a plain EXE:** place `app-config.json` (with that tenant's `Tenant`
-  value) and the `.pfx` next to the script/EXE. Same config shape as
-  [Part A, Step 6](#step-6--fill-in-app-configjson).
+  value, plus your `AppClientId`) and the `.pfx` next to the script/EXE. Same config shape as
+  [Part A, Step 5](#step-5--fill-in-app-configjson).
 - **Self-contained EXE** (built with the cert + tenant baked in via
   [BUILDING.md](BUILDING.md)): nothing to copy — the tenant and cert are already inside the
   EXE. Just hand over the single file.

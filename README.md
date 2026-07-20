@@ -67,15 +67,15 @@ What the client needs depends on how you built the EXE:
 - **Self-contained build** (built with an embedded certificate — see [BUILDING.md](BUILDING.md)): just `SP-MembershipManager.exe`. Nothing else to copy.
 - **Plain build:** place these three files in the same folder:
   - `SP-MembershipManager.exe` — built locally (see [BUILDING.md](BUILDING.md))
-  - `app-config.json` — copy from `app-config.example.json` and fill in your tenant details; the `CertificatePath` field should be the filename of your pfx (e.g. `sp-mm.pfx`)
+  - `app-config.json` — copy from `app-config.example.json` and fill in your tenant details; set `AppClientId` to your Entra app registration's Application (client) ID, and `CertificatePath` to the filename of your pfx (e.g. `sp-mm.pfx`)
   - `sp-mm.pfx` — the certificate for your Entra ID app registration (filename must match `CertificatePath` in `app-config.json`)
 
 Before first use, a Global Admin in the target tenant needs to grant consent for the app. This is a one-time step per tenant.
 
-Have the Global Admin visit this URL and sign in with their admin account:
+Have the Global Admin visit this URL and sign in with their admin account (swap in your app registration's Application (client) ID — the same value as `AppClientId` in `app-config.json`):
 
 ```
-https://login.microsoftonline.com/common/adminconsent?client_id=630f7dac-df2b-4586-a6b4-e83acbf4e91e&redirect_uri=https://trogdortheman.github.io/SP-MembershipManager/consent-complete.html
+https://login.microsoftonline.com/common/adminconsent?client_id=<your-application-client-id>&redirect_uri=https://trogdortheman.github.io/SP-MembershipManager/consent-complete.html
 ```
 
 They will see a consent prompt listing the permissions the app is requesting (SharePoint read/write across all sites, basic user directory and group membership read access). After they click Accept, the tool will work for anyone in that tenant with no further setup.
@@ -91,7 +91,7 @@ If you fork this repo, you can substitute your own multi-tenant Entra ID app reg
 - Supported account types: Accounts in any organizational directory (Multitenant)
 - Application permissions: `SharePoint > Sites.FullControl.All`, `Microsoft Graph > User.ReadBasic.All`, `Microsoft Graph > Sites.Read.All`, `Microsoft Graph > GroupMember.Read.All`
 
-Then replace `$script:AppClientId` near the top of `SP-MembershipManager.ps1` with your own Client ID, generate a certificate for your app registration, and update `app-config.json` with the cert path and your tenant name.
+Then set `AppClientId` in `app-config.json` to your own Application (client) ID, generate a certificate for your app registration, and fill in the cert path and your tenant name. No source edits are needed — the client ID is read from config. (For a self-contained EXE, pass it at build time with `build.ps1 -AppClientId`; see [BUILDING.md](BUILDING.md).)
 
 ## Restricting who can use the app (sign-in gate)
 
