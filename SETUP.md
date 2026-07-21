@@ -66,34 +66,61 @@ git clone https://github.com/TrogdorTheMan/SP-MembershipManager.git
 cd SP-MembershipManager
 ```
 
+> **Downloaded a ZIP instead of cloning?** Windows marks downloaded files as untrusted and
+> will refuse to run the script later (*"…is not digitally signed"*). After extracting, run
+> this once from the project folder to clear the block:
+>
+> ```powershell
+> Get-ChildItem -Recurse | Unblock-File
+> ```
+
 ## Step 2 — Create the app registration in Entra ID
 
 This is the identity the tool signs in as.
 
 1. Go to [portal.azure.com](https://portal.azure.com) and sign in with a **Global Admin**
    account.
-2. Navigate to **Entra ID → App registrations → + New registration**.
+2. In the **search bar at the top**, type `App registrations` and open it (this works the
+   same whether your org uses portal.azure.com or entra.microsoft.com). Click
+   **+ New registration**.
 3. Fill in:
    - **Name:** `SP-MembershipManager` (anything you like)
    - **Supported account types:** *Accounts in any organizational directory (Multitenant)*
    - **Redirect URI:** leave blank for now.
 4. Click **Register.**
-5. On the app's **Overview** page, copy the **Application (client) ID** — you'll need it in
-   Step 5. This is a GUID like `00000000-1111-2222-3333-444444444444`.
+5. On the app's **Overview** page, copy the **Application (client) ID** and paste it
+   somewhere handy — you'll need it in **Step 5 — Fill in `app-config.json`**. It's a GUID
+   like `a1b2c3d4-0000-1111-2222-333344445555`.
 
 ### Add the API permissions
 
-The tool needs read/write access to SharePoint and read access to users and groups.
+The tool needs read/write access to SharePoint and read access to users and groups. You'll
+add four **Application** permissions — three from Microsoft Graph, one from SharePoint:
 
-6. Go to **API permissions → + Add a permission** and add each of these as
-   **Application permissions** (not Delegated):
+1. On your new app's page, go to **API permissions → + Add a permission**.
+2. Pick the big **Microsoft Graph** tile, then choose **Application permissions** (not
+   Delegated — this choice only appears *after* you pick the API).
+3. Use the search box to find each of these and tick its checkbox — you can tick all three
+   before moving on:
+   - `User.ReadBasic.All`
+   - `Sites.Read.All`
+   - `GroupMember.Read.All`
+4. Click **Add permissions** at the bottom.
+5. Click **+ Add a permission** again. This time **scroll down past Microsoft Graph** and
+   pick **SharePoint**, then **Application permissions**, tick `Sites.FullControl.All`, and
+   click **Add permissions**.
+6. **Checkpoint** — the permissions list should now show these four rows, each with
+   **Type = Application**:
 
-   | API | Permission |
-   |-----|------------|
-   | **SharePoint** | `Sites.FullControl.All` |
-   | **Microsoft Graph** | `User.ReadBasic.All` |
-   | **Microsoft Graph** | `Sites.Read.All` |
-   | **Microsoft Graph** | `GroupMember.Read.All` |
+   | API | Permission | Type |
+   |-----|------------|------|
+   | **Microsoft Graph** | `User.ReadBasic.All` | Application |
+   | **Microsoft Graph** | `Sites.Read.All` | Application |
+   | **Microsoft Graph** | `GroupMember.Read.All` | Application |
+   | **SharePoint** | `Sites.FullControl.All` | Application |
+
+   (You'll also see a Delegated `User.Read` row — Entra adds that to every new registration
+   by default. Leave it; it's harmless.)
 
 7. Don't click "Grant admin consent" here yet — you'll do the consent step properly in
    **Step 6** (it's the same thing, but the tool gives you a link that lands on a friendly
@@ -105,7 +132,7 @@ The consent step (Step 6) sends the admin to a small "you're all set" web page a
 approve. That page's address has to be registered on your app or Entra will reject the
 redirect.
 
-8. Go to **Authentication → + Add a platform → Web**, and add this redirect URI:
+1. Go to **Authentication → + Add a platform → Web**, and add this redirect URI:
 
    ```
    https://trogdortheman.github.io/SP-MembershipManager/consent-complete.html
@@ -115,7 +142,7 @@ redirect.
    you'd rather host your own, change the `redirect_uri` in the consent URL that
    `SP-MembershipManager.ps1` builds — search the script for `consent-complete.html` — and
    register your own URL here instead.)
-9. Click **Save.**
+2. Click **Save.**
 
 ## Step 3 — Generate a certificate
 
@@ -141,7 +168,7 @@ Export-PfxCertificate -Cert $cert -FilePath ".\sp-mm.pfx" -Password $password
 Export-Certificate -Cert $cert -FilePath ".\sp-mm.cer"
 ```
 
-Remember the password you typed — it goes into `app-config.json` in Step 6. You now have two
+Remember the password you typed — it goes into `app-config.json` in Step 5. You now have two
 files in the project folder:
 
 - `sp-mm.pfx` — private key (stays with the tool; **never** commit it or email it)
@@ -159,10 +186,11 @@ files in the project folder:
 ## Step 5 — Fill in `app-config.json`
 
 This is where you point the tool at **your** app registration and tenant — no code editing
-required. Copy the example and open the copy:
+required. Copy the example and open the copy in Notepad:
 
 ```powershell
 Copy-Item app-config.example.json app-config.json
+notepad app-config.json
 ```
 
 Edit `app-config.json` so it looks like this (leave the `Gate*` fields empty for now — they're
@@ -183,14 +211,22 @@ the optional sign-in gate, covered at the end):
 
 - **`AppClientId`** — the **Application (client) ID** you copied in Step 2. This is what makes
   the tool sign in as *your* app registration. (It ships empty; the tool won't run until you
-  set it.)
+  set it.) Paste **just the GUID — no `<` `>` brackets**. A finished value looks like:
+  `"AppClientId": "a1b2c3d4-0000-1111-2222-333344445555"`
 - **`CertificatePath`** — path to your `.pfx`. `.\sp-mm.pfx` is right if it's in the same
   folder.
 - **`CertificatePassword`** — the plaintext password from Step 3. This is temporary: on the
   first successful connect the tool encrypts it with Windows DPAPI and overwrites this field
   with a ciphertext blob, and flips `CertificatePasswordEncrypted` to `true`. The plaintext
   never stays on disk.
-- **`Tenant`** — your tenant, e.g. `contoso.onmicrosoft.com`.
+- **`Tenant`** — your tenant's `.onmicrosoft.com` name, e.g. `contoso.onmicrosoft.com`.
+  Not sure what yours is? In the portal, search for **Microsoft Entra ID** and look at
+  **Overview → Primary domain**. If your org signs in with a custom domain (e.g.
+  `contoso.com`), don't use that — use the `.onmicrosoft.com` name listed under
+  **Custom domain names** instead.
+
+> **JSON is picky.** Keep every quote mark and comma exactly as in the example, and edit in
+> Notepad — word processors replace straight quotes with curly ones, which breaks the file.
 
 ## Step 6 — Grant admin consent
 
@@ -200,7 +236,7 @@ The easiest way: launch the tool (Step 7). If consent is missing, it detects tha
 consent page in your browser automatically, and offers a **Relaunch** button once you're done.
 
 If you'd rather do it up front, have a **Global Admin** open this URL (swap in **your** client
-ID) and sign in:
+ID — just the GUID, no `<` `>` brackets) and sign in:
 
 ```
 https://login.microsoftonline.com/common/adminconsent?client_id=<your-application-client-id>&redirect_uri=https://trogdortheman.github.io/SP-MembershipManager/consent-complete.html
@@ -210,16 +246,30 @@ They'll see the list of permissions (SharePoint read/write, basic user + group r
 they click **Accept**, they land on the confirmation page and you're done — this holds for
 everyone in the tenant, no per-user setup.
 
+> **Consent can take a few minutes to propagate.** If the tool gets an authorization error
+> right after the admin clicks Accept, nothing is wrong — wait five minutes and relaunch.
+
 ## Step 7 — Run it
 
 ```powershell
 .\SP-MembershipManager.ps1
 ```
 
-A dialog asks for your **SharePoint Admin URL** — e.g. `https://yourtenant-admin.sharepoint.com`.
+The **first launch may pause for a minute or two** while it installs the PnP.PowerShell
+module (`PnP.PowerShell module not found. Installing...`). That's normal, needs internet
+access, and only happens once.
+
+A dialog asks for your **SharePoint Admin URL**. That's your tenant name (the part before
+`.onmicrosoft.com`) with `-admin` attached — for tenant `contoso.onmicrosoft.com` it's:
+
+```
+https://contoso-admin.sharepoint.com
+```
+
 Enter it and the tool connects, loads your site list, and opens the main window.
 
-That's it — you're set up. Day-to-day usage is in **[USAGE.md](USAGE.md)**.
+That's it — you're set up. Day-to-day usage is in **[USAGE.md](USAGE.md)**. Working, and
+ready to package it for your company as a single EXE? Head to **[BUILDING.md](BUILDING.md)**.
 
 ---
 
@@ -257,6 +307,12 @@ How the client gets configured depends on how you're delivering the tool:
 - **Running from source or a plain EXE:** place `app-config.json` (with that tenant's `Tenant`
   value, plus your `AppClientId`) and the `.pfx` next to the script/EXE. Same config shape as
   [Part A, Step 5](#step-5--fill-in-app-configjson).
+
+  > **Handing this to someone else?** Their copy of the config must start with the
+  > **plaintext** cert password and `CertificatePasswordEncrypted: false` — an encrypted
+  > value from *your* machine won't decrypt on theirs (it re-encrypts for their account on
+  > first run). Send the password through a password manager or other secure channel, never
+  > in the same email as the files.
 - **Self-contained EXE** (built with the cert + tenant baked in via
   [BUILDING.md](BUILDING.md)): nothing to copy — the tenant and cert are already inside the
   EXE. Just hand over the single file.
@@ -278,6 +334,22 @@ couple of config values.
 That's its own short setup — see
 **[Restricting who can use the app](README.md#restricting-who-can-use-the-app-sign-in-gate)**
 in the README. Everything above works fine without it; you can add the gate later.
+
+---
+
+## If something goes wrong
+
+The predictable snags, and what each one means:
+
+| What you see | What it means | Fix |
+|--------------|---------------|-----|
+| *"…is not digitally signed"* or *"running scripts is disabled"* | Windows blocked the downloaded files | From the project folder run `Get-ChildItem -Recurse \| Unblock-File`, then relaunch (see Step 1) |
+| Authorization/permission error right after granting consent | Consent hasn't propagated yet | Nothing is wrong — wait ~5 minutes and relaunch |
+| *"app-config.json is missing AppClientId"* | The `AppClientId` field is empty | Paste your app registration's Application (client) ID — just the GUID (Step 5) |
+| Config error dialog as soon as it launches | `app-config.json` isn't valid JSON | Re-copy `app-config.example.json` and re-edit in Notepad; look for a missing comma, leftover `<` `>` brackets, or curly “smart quotes” |
+| Certificate/password error when connecting | Wrong `.pfx` password in the config | Set `CertificatePasswordEncrypted` to `false` and re-enter the password from Step 3 |
+| *"Could not decrypt the certificate password"* | The config was encrypted on a different machine or user account | Set `CertificatePasswordEncrypted` to `false`, restore the plaintext password, relaunch |
+| First launch sits on `Installing...` | It's downloading the PnP.PowerShell module | Give it a minute or two; it needs internet access and only happens once |
 
 ---
 
