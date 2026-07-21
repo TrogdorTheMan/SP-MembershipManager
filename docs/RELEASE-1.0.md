@@ -27,10 +27,17 @@ Working notes for shipping v1.0.0. Delete this file once the release is tagged.
 - [ ] **AT-10**: full wizard build with cert produces a working EXE
 - [ ] **AT-12**: hand-edit `app-config.json` to drop `AppClientId` → startup error dialog, app exits
 - [ ] **AT-13**: wizard with cert but blank App Client ID → validation error, no build
-- [ ] **Rotate app registration**: create a fresh app registration by following SETUP.md verbatim
-  (doubles as the SETUP.md acceptance pass); set the new `AppClientId` in local `app-config.json`;
-  smoke-test a from-source launch; then delete the old registration in Entra so the client ID in
-  old git history is a dead identifier. Log any SETUP.md friction as doc fixes.
+- [ ] **Rotate app registration** — order matters: deleting the old registration kills it in
+  every consented tenant at once, so it goes last
+  - [ ] Create a fresh multitenant registration in the personal tenant by following SETUP.md
+    Part A verbatim (doubles as the SETUP.md acceptance pass); reuse the existing PFX
+  - [ ] Set the new `AppClientId` in local `app-config.json`; smoke-test a from-source launch
+  - [ ] Each deployed tenant: Global Admin re-consents to the new client ID (SETUP.md Part B
+    or the first-run consent flow); rebuild/redeliver their EXE with the new `-AppClientId`
+    (or update their `app-config.json`)
+  - [ ] Only once every tenant is on the new ID: delete the old registration in Entra — the
+    client ID in old git history becomes a dead identifier
+  - [ ] Log any SETUP.md friction found along the way as doc fixes
 - [ ] Record pass dates in `docs/ACCEPTANCE-TESTS.md`
 - [ ] Tag and push: `git tag v1.0.0 && git push origin main v1.0.0`
 - [ ] Optional: GitHub Release from the tag — **source/tag only**; never attach a configured EXE (they bake tenant config and certs)
