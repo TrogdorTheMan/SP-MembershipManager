@@ -13,6 +13,8 @@
       AT-2/4/8    -> per-client params baked into client-config correctly
       AT-3        -> cert fields embedded only when -CertPath set
       AT-9b       -> the same gate rule the runtime guard enforces
+      AT-12       -> source ships no app identity (AppClientId is per-deployer)
+      AT-13       -> cert requires -AppClientId (build.ps1 half of the wizard rule)
 #>
 
 BeforeAll {
@@ -135,5 +137,26 @@ Describe 'build.ps1 -ConfigOnly (dry run)' {
     It 'still enforces validation in dry-run mode (AT-9)' {
         { & $script:BuildScript -GateClientId 'cid' -ConfigOnly } |
             Should -Throw '*The sign-in gate requires both (or neither).*'
+    }
+
+    It 'bakes AppClientId into the preview config for an embedded-cert build (AT-3)' {
+        $pfx = Join-Path $TestDrive 'cert.pfx'
+        Set-Content -Path $pfx -Value 'not-a-real-cert'
+        & $script:BuildScript -CertPath $pfx -CertPassword 'pw' -Tenant 'contoso.onmicrosoft.com' -AppClientId 'cid' -ConfigOnly
+        $written = Get-Content $script:PreviewPath -Raw | ConvertFrom-Json
+        $written.AppClientId | Should -Be 'cid'
+        $written.Tenant      | Should -Be 'contoso.onmicrosoft.com'
+    }
+}
+
+Describe 'Source hygiene: no baked-in app identity (AT-12)' {
+    It 'ships an empty $script:AppClientId in SP-MembershipManager.ps1' {
+        $src = Get-Content (Join-Path $script:Root 'SP-MembershipManager.ps1') -Raw
+        $src | Should -Match '\$script:AppClientId\s*=\s*""'
+        $src | Should -Not -Match '\$script:AppClientId\s*=\s*["''][0-9a-fA-F][0-9a-fA-F-]+["'']'
+    }
+    It 'app-config.example.json carries a placeholder, not a real client id' {
+        $cfg = Get-Content (Join-Path $script:Root 'app-config.example.json') -Raw | ConvertFrom-Json
+        $cfg.AppClientId | Should -Not -Match '^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$'
     }
 }

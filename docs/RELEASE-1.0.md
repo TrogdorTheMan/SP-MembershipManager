@@ -25,6 +25,12 @@ Working notes for shipping v1.0.0. Delete this file once the release is tagged.
   - [ ] AT-8 outsider gets Access Denied (gate from baked config)
 - [ ] **AT-1 remainder** (unconfigured build): confirm a user *without* access is denied
 - [ ] **AT-10**: full wizard build with cert produces a working EXE
+- [ ] **AT-12**: hand-edit `app-config.json` to drop `AppClientId` → startup error dialog, app exits
+- [ ] **AT-13**: wizard with cert but blank App Client ID → validation error, no build
+- [ ] **Rotate app registration**: create a fresh app registration by following SETUP.md verbatim
+  (doubles as the SETUP.md acceptance pass); set the new `AppClientId` in local `app-config.json`;
+  smoke-test a from-source launch; then delete the old registration in Entra so the client ID in
+  old git history is a dead identifier. Log any SETUP.md friction as doc fixes.
 - [ ] Record pass dates in `docs/ACCEPTANCE-TESTS.md`
 - [ ] Tag and push: `git tag v1.0.0 && git push origin main v1.0.0`
 - [ ] Optional: GitHub Release from the tag — **source/tag only**; never attach a configured EXE (they bake tenant config and certs)

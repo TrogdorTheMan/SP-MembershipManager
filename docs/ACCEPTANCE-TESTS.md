@@ -61,6 +61,7 @@ without running `dotnet publish`.
     -CertPath ".\sp-mm.pfx" `
     -CertPassword "yourpassword" `
     -Tenant "yourtenant.onmicrosoft.com" `
+    -AppClientId "<your-app-client-id>" `
     -LockedAdminUrl "https://yourtenant-admin.sharepoint.com"
 ```
 
@@ -68,7 +69,9 @@ without running `dotnet publish`.
 2. Launch the EXE from that folder.
 3. App launches and connects to SharePoint without any external files.
 
-**Pass:** App works with zero external configuration files.
+**Pass:** App works with zero external configuration files — including the app
+registration client ID, which is baked in via `-AppClientId` (there is no
+`app-config.json` to supply it).
 
 ---
 
@@ -162,7 +165,7 @@ without running `dotnet publish`.
 
 1. Run `.\build-wizard.ps1`.
 2. A WinForms window opens with labeled fields for all build parameters.
-3. Fill in at minimum: CertPath, CertPassword, Tenant, LockedAdminUrl.
+3. Fill in at minimum: CertPath, CertPassword, Tenant, App Client ID, LockedAdminUrl.
 4. Click **Build**.
 5. Progress output appears in the output panel.
 6. EXE is produced at `build\output\SP-MembershipManager.exe`.
@@ -181,3 +184,22 @@ without running `dotnet publish`.
 4. Fill in both gate fields. Click **Build**.
    - **Pass:** Build runs with no validation prompts.
 - 07-05-26: Passes — half-gate validation error, no-gate warning with No cancelling, and Yes proceeding with a gate-less build all confirmed. (Same day: wizard layout rebuilt — window now sizes to content, DPI-aware, resizable with anchored controls.)
+
+---
+
+## AT-12: Missing AppClientId rejected at runtime — 🟢 Auto (rule) + 🔴 Manual (dialog)
+
+**Setup:** Use a working from-source setup, then hand-edit `app-config.json` to remove the `AppClientId` key (or set it to `""`).
+
+1. Launch from source (`pwsh .\SP-MembershipManager.ps1`).
+
+**Pass:** Error dialog on startup: *"app-config.json is missing AppClientId..."* pointing at SETUP.md. App exits before any connection attempt. (Companion runtime guard: a self-contained EXE whose baked config lacks the value is caught after config merge with *"No app registration is configured..."* — build-time validation makes this unreachable via `build.ps1`, so it is defense in depth only.)
+
+---
+
+## AT-13: Wizard cert-without-client-ID validation — 🔴 Manual (WinForms validation)
+
+1. Run `.\build-wizard.ps1`.
+2. Fill in CertPath, CertPassword, and Tenant, but leave **App Client ID** blank. Click **Build**.
+
+**Pass:** Validation error: *"Certificate Password, Tenant, and App Client ID are required when a certificate is specified."* No build runs. (The `build.ps1` command-line half of this rule is Pester-covered in `tests/build.Tests.ps1`.)
