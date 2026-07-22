@@ -109,7 +109,7 @@ Then set `AppClientId` in `app-config.json` to your own Application (client) ID,
 
 By default the tool runs with the app-only certificate, so anyone who can launch the exe inherits its access. The optional sign-in gate closes that gap: on every launch the user must sign in interactively, and access continues only if they belong to a security group you designate in Microsoft Entra. The gate runs before any SharePoint connection, so an unauthorized user never reaches the privileged session.
 
-The gate is **off until you configure it** (the `GateClientId` and `GateGroupId` fields in `app-config.json` are empty by default). To turn it on:
+The gate is **off until you configure it** (the `GateClientId` and `GateGroupId` fields in `app-config.json` are empty by default). The summary below is the quick reference — for the click-by-click walkthrough (including the gate's own admin-consent step and verification), see **[SETUP.md Part C](SETUP.md#part-c--restrict-who-can-run-the-tool-sign-in-gate-optional)**. To turn it on:
 
 **1. Pick the Microsoft Entra security group that authorizes use.** In Entra ID, choose or create a security group whose members are allowed to run the tool, then copy its **Object ID**. This is the single most important step — only members of this group will be allowed past the sign-in. Put the Object ID in `GateGroupId`.
 
@@ -121,6 +121,8 @@ The gate is **off until you configure it** (the `GateClientId` and `GateGroupId`
 - **Token configuration → Add groups claim:** emit groups in the **ID token**. Choose **Groups assigned to the application** (recommended — it keeps the claim small and avoids the 200-group overage that would otherwise block users in many groups), then assign your authorizing group to the app under Enterprise applications. If you instead choose **Security groups**, users who belong to more than ~200 groups will be denied with guidance to switch to the assigned-groups option.
 
 **3. Fill in `app-config.json`.** Set `GateClientId` to the new registration's Application (client) ID and `GateGroupId` to the group Object ID from step 1. Provide both or neither — setting only one is treated as a misconfiguration and blocks startup so the gate can never silently fail open. Optionally set `GateRequestContact` to an email address or URL; a denied user then gets a **Request Access** button that opens it (a bare email becomes a pre-filled `mailto:`).
+
+**4. Grant admin consent for the gate app** — a one-time approval per tenant, **separate from the certificate app's consent**. Easiest: launch the tool; if consent is missing it shows a dialog with the consent URL ready to copy to a Global Admin.
 
 Once configured, users outside the group see a friendly Access Denied dialog (with the Request Access button when a contact is set) and the tool exits; cancelling the sign-in also exits.
 

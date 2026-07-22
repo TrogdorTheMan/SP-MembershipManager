@@ -16,6 +16,11 @@ There are two paths. Pick the one that matches your situation:
 
 If you're not sure, you almost certainly want **Part A**.
 
+There's also an optional
+**[Part C — the sign-in gate](#part-c--restrict-who-can-run-the-tool-sign-in-gate-optional)**,
+which restricts who can run the tool to a security group you choose. Do it after Part A,
+or skip it entirely.
+
 > **Just want to build the EXE?** Setup (this guide) is about connecting the tool to a
 > tenant. Packaging it into a distributable `.exe` is a separate step covered in
 > **[BUILDING.md](BUILDING.md)**. You can do the whole of Part A running from source first,
@@ -305,8 +310,11 @@ baked into the EXE with `build.ps1 -AppClientId`):
 https://login.microsoftonline.com/common/adminconsent?client_id=<your-application-client-id>&redirect_uri=https://trogdortheman.github.io/SP-MembershipManager/consent-complete.html
 ```
 
-They click **Accept** on the permissions list and land on the confirmation page. That's the
-only tenant-side action needed.
+They click **Accept** on the permissions list and land on the confirmation page.
+
+> **Using the sign-in gate?** The gate app needs its **own** admin consent in the new
+> tenant as well — same URL shape with the gate's client ID, or just launch the tool and
+> use the consent dialog it shows. See [Part C, Step 6](#step-6--grant-admin-consent-for-the-gate-app).
 
 > **Already consented before, but group access isn't showing?** If the tenant consented
 > before `GroupMember.Read.All` was added to the app, have the admin visit the URL again to
@@ -337,16 +345,95 @@ build made with `-LockedAdminUrl`, it's already pre-filled and locked), and you'
 
 ---
 
-## Optional — restrict who can run the tool (sign-in gate)
+# Part C — Restrict who can run the tool (sign-in gate, optional)
 
-By default, anyone who can launch the tool inherits its SharePoint access. The optional
-**sign-in gate** makes each user sign in interactively and only lets through members of an
-Entra security group you choose. It needs a second (public-client) app registration and a
-couple of config values.
+By default, anyone who can launch the tool inherits its full SharePoint access. The
+**sign-in gate** closes that gap: each user must sign in interactively, and only members of
+an Entra security group you choose get through. Everything in Parts A and B works fine
+without it — you can add the gate any time.
 
-That's its own short setup — see
-**[Restricting who can use the app](README.md#restricting-who-can-use-the-app-sign-in-gate)**
-in the README. Everything above works fine without it; you can add the gate later.
+The gate needs one security group, one extra (public-client) app registration, and two
+config values.
+
+## Step 1 — Pick the security group
+
+1. In the portal, search for **Groups** and open it. Choose an existing security group or
+   click **New group** (type: **Security**) and add the people allowed to run the tool.
+2. Open the group and copy its **Object ID** — a GUID. This goes in `GateGroupId` later.
+   Only members of this group will get past the sign-in.
+
+## Step 2 — Create the gate app registration
+
+This is a second, separate registration — don't reuse the one from Part A (that one holds
+the certificate; this one only identifies the sign-in prompt).
+
+1. **App registrations → + New registration.**
+   - **Name:** `SP-MembershipManager Gate` (anything you like)
+   - **Supported account types:** *Accounts in any organizational directory (Multitenant)*
+2. Click **Register**, then copy the **Application (client) ID** from the Overview page —
+   this goes in `GateClientId` later.
+3. **Authentication** → add a platform of type **Mobile and desktop applications** and
+   tick/enter the redirect URI `http://localhost`. (On the new *Authentication (Preview)*
+   page: **Add Redirect URI → Mobile and desktop applications → `http://localhost`**.)
+4. **API permissions**: the default delegated `User.Read` is fine to leave as-is — the gate
+   only needs `openid` and `profile`, which sign-in includes automatically. No Graph data
+   permissions are needed; group membership is read from the sign-in token.
+
+## Step 3 — Emit the groups claim
+
+The gate checks group membership from the ID token, so the token has to carry it:
+
+1. On the gate app: **Token configuration → + Add groups claim.**
+2. Select **Groups assigned to the application** (recommended — keeps the token small; the
+   alternative *Security groups* option breaks for users in more than ~200 groups).
+3. Under **ID**, make sure the claim is emitted in the **ID token**. Save.
+
+## Step 4 — Assign the group to the gate app
+
+Because the claim is "groups **assigned** to the application," the authorizing group must
+actually be assigned, or the token never carries it and everyone is denied:
+
+1. Search the portal for **Enterprise applications** and open the gate app's entry
+   (same name as the registration).
+2. **Users and groups → + Add user/group** → select the security group from Step 1 → Assign.
+
+## Step 5 — Configure the tool
+
+Both values, or neither — setting only one blocks startup so the gate can never silently
+fail open.
+
+- **Running from source / plain EXE:** in `app-config.json`, set `GateClientId` (Step 2)
+  and `GateGroupId` (Step 1). Optionally set `GateRequestContact` to an email or URL —
+  denied users then get a **Request Access** button that opens it.
+- **Distributable EXE:** bake the same values in at build time with
+  `build.ps1 -GateClientId … -GateGroupId …` (or the wizard's Sign-In Gate fields) —
+  baked values override `app-config.json`, so the gate can't be stripped by editing a
+  text file next to the EXE. See [BUILDING.md](BUILDING.md).
+
+## Step 6 — Grant admin consent for the gate app
+
+Like the Part A app, the gate app needs a one-time admin consent **in each tenant where
+people sign in**. Easiest path: just launch the tool — if consent is missing, it shows a
+consent dialog with the URL and a **Copy URL** button for your Global Admin. To do it up
+front instead, the admin opens (gate client ID from Step 2, no `<` `>` brackets):
+
+```
+https://login.microsoftonline.com/common/adminconsent?client_id=<your-gate-client-id>&redirect_uri=https://trogdortheman.github.io/SP-MembershipManager/consent-complete.html
+```
+
+> This is a **second, separate consent** from the Part A / Part B one — consenting the
+> certificate app does not cover the gate app.
+
+## Step 7 — Verify the gate
+
+Don't skip this — it's the security boundary:
+
+1. Launch as a **member** of the group → sign-in succeeds, the tool opens.
+2. Launch as someone **not in the group** → the Access Denied dialog appears (with the
+   Request Access button if you set a contact) and the tool exits.
+
+If a group member is denied: check Step 4 (group actually assigned to the enterprise app)
+and Step 3 (claim emitted in the **ID** token) — those two cover nearly every gate failure.
 
 ---
 
