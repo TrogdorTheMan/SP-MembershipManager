@@ -100,11 +100,11 @@ To bake in per-client settings, add parameters:
 
 **Certificate (embed in EXE)** — Normally the EXE reads its certificate (and its app registration client ID) from `app-config.json` placed next to it. If you supply the certificate at build time (`-CertPath` + `-CertPassword` + `-Tenant` + `-AppClientId`, or the Certificate boxes in the wizard), the cert is baked **inside** the EXE and the client gets a single self-contained file with nothing else to copy. Because there's no `app-config.json` at runtime, `-AppClientId` is required here so the EXE knows which app registration to sign in as. Convenient — but see the [security note](#security-the-embedded-certificate-build).
 
-**Tenant Lock (Locked Admin URL)** — Forces the EXE to a specific tenant. The admin-URL prompt still appears at launch, but it's pre-filled and read-only, so the user can't retarget the tool somewhere else.
+**Tenant Lock (Locked Admin URL)** — *Optional but encouraged.* Forces the EXE to a specific tenant. The admin-URL prompt still appears at launch, but it's pre-filled and read-only, so the user can't retarget the tool somewhere else.
 
-**Sign-In Gate** — By default, anyone who can launch the EXE inherits its SharePoint access. The gate closes that gap: it makes each user sign in interactively and only lets them through if they belong to an Entra security group you choose. **You provide both** the gate app's Client ID **and** the group's Object ID — providing only one is rejected (a half-configured gate would fail at startup). Setting up the gate app registration is a one-time Azure task documented in the [README](README.md#restricting-who-can-use-the-app-sign-in-gate).
+**Sign-In Gate** — *Optional but encouraged for any distributed build.* By default, anyone who can launch the EXE inherits its SharePoint access. The gate closes that gap: it makes each user sign in interactively and only lets them through if they belong to an Entra security group you choose. **You provide both** the gate app's Client ID **and** the group's Object ID — providing only one is rejected (a half-configured gate would fail at startup). Setting up the gate app registration is a one-time Azure task, documented click-by-click in [SETUP.md Part C](SETUP.md#part-c--restrict-who-can-run-the-tool-sign-in-gate-optional-but-encouraged).
 
-**Critical Sites** — Sites you mark as sensitive show up with a red background, and only members of the *Critical Site Group* can add/remove access on them. Everyone else sees the buttons disabled with a "contact an administrator" note.
+**Critical Sites** — *Optional but encouraged if the tenant has sensitive sites (HR, Finance, executive).* Sites you mark as sensitive show up with a red background, and only members of the *Critical Site Group* can add/remove access on them. Everyone else sees the buttons disabled with a "contact an administrator" note.
 
 ---
 

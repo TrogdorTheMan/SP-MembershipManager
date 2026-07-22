@@ -109,14 +109,14 @@ $txtAppClientId.PlaceholderText = "App registration (client) ID  (required if ce
 Add-Row "App Client ID" $txtAppClientId
 
 # --- Tenant lock section ---
-Add-Section "Tenant Lock"
+Add-Section "Tenant Lock (optional but encouraged)"
 
 $txtLockedAdminUrl = New-Object System.Windows.Forms.TextBox
 $txtLockedAdminUrl.PlaceholderText = "https://contoso-admin.sharepoint.com  (optional)"
 Add-Row "Locked Admin URL" $txtLockedAdminUrl
 
 # --- Gate section ---
-Add-Section "Sign-In Gate (overrides app-config.json)"
+Add-Section "Sign-In Gate (optional but encouraged — overrides app-config.json)"
 
 $txtGateClientId = New-Object System.Windows.Forms.TextBox
 $txtGateClientId.PlaceholderText = "Application (client) ID of the gate app registration"
@@ -131,7 +131,7 @@ $txtGateRequestContact.PlaceholderText = "Email or URL shown on Access Denied di
 Add-Row "Request Access Contact" $txtGateRequestContact
 
 # --- Critical sites section ---
-Add-Section "Critical Sites"
+Add-Section "Critical Sites (optional but encouraged)"
 
 $txtCriticalSiteGroupId = New-Object System.Windows.Forms.TextBox
 $txtCriticalSiteGroupId.PlaceholderText = "Entra group object ID — members may manage critical sites"

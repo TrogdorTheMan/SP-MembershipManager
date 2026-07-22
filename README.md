@@ -107,9 +107,9 @@ Then set `AppClientId` in `app-config.json` to your own Application (client) ID,
 
 ## Restricting who can use the app (sign-in gate)
 
-By default the tool runs with the app-only certificate, so anyone who can launch the exe inherits its access. The optional sign-in gate closes that gap: on every launch the user must sign in interactively, and access continues only if they belong to a security group you designate in Microsoft Entra. The gate runs before any SharePoint connection, so an unauthorized user never reaches the privileged session.
+By default the tool runs with the app-only certificate, so anyone who can launch the exe inherits its access. The sign-in gate — optional, but encouraged for any distributed build — closes that gap: on every launch the user must sign in interactively, and access continues only if they belong to a security group you designate in Microsoft Entra. The gate runs before any SharePoint connection, so an unauthorized user never reaches the privileged session.
 
-The gate is **off until you configure it** (the `GateClientId` and `GateGroupId` fields in `app-config.json` are empty by default). The summary below is the quick reference — for the click-by-click walkthrough (including the gate's own admin-consent step and verification), see **[SETUP.md Part C](SETUP.md#part-c--restrict-who-can-run-the-tool-sign-in-gate-optional)**. To turn it on:
+The gate is **off until you configure it** (the `GateClientId` and `GateGroupId` fields in `app-config.json` are empty by default). The summary below is the quick reference — for the click-by-click walkthrough (including the gate's own admin-consent step and verification), see **[SETUP.md Part C](SETUP.md#part-c--restrict-who-can-run-the-tool-sign-in-gate-optional-but-encouraged)**. To turn it on:
 
 **1. Pick the Microsoft Entra security group that authorizes use.** In Entra ID, choose or create a security group whose members are allowed to run the tool, then copy its **Object ID**. This is the single most important step — only members of this group will be allowed past the sign-in. Put the Object ID in `GateGroupId`.
 

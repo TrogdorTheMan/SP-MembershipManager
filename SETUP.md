@@ -16,10 +16,10 @@ There are two paths. Pick the one that matches your situation:
 
 If you're not sure, you almost certainly want **Part A**.
 
-There's also an optional
-**[Part C — the sign-in gate](#part-c--restrict-who-can-run-the-tool-sign-in-gate-optional)**,
-which restricts who can run the tool to a security group you choose. Do it after Part A,
-or skip it entirely.
+There's also
+**[Part C — the sign-in gate](#part-c--restrict-who-can-run-the-tool-sign-in-gate-optional-but-encouraged)**
+— optional but encouraged — which restricts who can run the tool to a security group you
+choose. Do it after Part A.
 
 > **Just want to build the EXE?** Setup (this guide) is about connecting the tool to a
 > tenant. Packaging it into a distributable `.exe` is a separate step covered in
@@ -204,7 +204,7 @@ notepad app-config.json
 ```
 
 Edit `app-config.json` so it looks like this (leave the `Gate*` fields empty for now — they're
-the optional sign-in gate, covered at the end):
+the optional-but-encouraged sign-in gate, covered in Part C):
 
 ```json
 {
@@ -345,7 +345,7 @@ build made with `-LockedAdminUrl`, it's already pre-filled and locked), and you'
 
 ---
 
-# Part C — Restrict who can run the tool (sign-in gate, optional)
+# Part C — Restrict who can run the tool (sign-in gate, optional but encouraged)
 
 By default, anyone who can launch the tool inherits its full SharePoint access. The
 **sign-in gate** closes that gap: each user must sign in interactively, and only members of
