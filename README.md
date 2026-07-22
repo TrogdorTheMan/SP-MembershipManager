@@ -22,6 +22,18 @@ A Windows GUI tool that lets authorized users manage SharePoint Online site memb
 
 No SharePoint Administrator role is required for the end user running the tool. Authentication is handled via an app-only service principal with pre-granted permissions.
 
+## Which guide do I need?
+
+Each doc covers one stage — finishing one does **not** cover the next:
+
+| Guide | Who it's for | What "done" means |
+|-------|--------------|-------------------|
+| [SETUP.md](SETUP.md) | Whoever connects the tool to a tenant | The tool runs **from source** and connects |
+| [BUILDING.md](BUILDING.md) | Whoever packages a distributable EXE | A compiled EXE with your per-client config baked in |
+| [docs/ACCEPTANCE-TESTS.md](docs/ACCEPTANCE-TESTS.md) | Whoever built that EXE | The EXE **demonstrably enforces** what was baked in — a configured build isn't finished until these pass |
+| [USAGE.md](USAGE.md) | End users | Day-to-day use |
+| [CERT-RENEWAL.md](CERT-RENEWAL.md) | Maintainers | Certificate renewed before expiry |
+
 ## Setting up for a tenant
 
 New to the project and want it running against your tenant? **[SETUP.md](SETUP.md)** is the full step-by-step guide — creating your own Entra ID app registration, generating the certificate, granting consent, and filling in the config, with the exact portal clicks and commands. It also has a shorter path for deploying to an additional tenant once the app registration already exists.

@@ -15,14 +15,14 @@ Working notes for shipping v1.0.0. Delete this file once the release is tagged.
 
 ## Remaining (needs the main PC — real .pfx + tenant values live there)
 
-- [x] **Build A** (fully loaded): cert + tenant + `-LockedAdminUrl` + gate + critical sites
-  - [x] AT-2 locked admin URL (read-only prompt)
-  - [x] AT-3 self-contained EXE in empty folder
-  - [x] AT-4 critical row red (power user sign-in)
-  - [x] AT-5 power user can manage critical row
-  - [x] AT-6 standard user blocked on critical row (buttons disabled + warning)
-  - [x] AT-7 standard user unaffected on normal rows
-  - [x] AT-8 outsider gets Access Denied (gate from baked config)
+- [ ] **Build A** (fully loaded): cert + tenant + `-LockedAdminUrl` + gate + critical sites
+  - [ ] AT-2 locked admin URL (read-only prompt)
+  - [ ] AT-3 self-contained EXE in empty folder
+  - [ ] AT-4 critical row red (power user sign-in)
+  - [ ] AT-5 power user can manage critical row
+  - [ ] AT-6 standard user blocked on critical row (buttons disabled + warning)
+  - [ ] AT-7 standard user unaffected on normal rows
+  - [ ] AT-8 outsider gets Access Denied (gate from baked config)
 - [ ] **AT-1 remainder** (unconfigured build): confirm a user *without* access is denied
 - [ ] **AT-10**: full wizard build with cert produces a working EXE
 - [ ] **AT-12**: hand-edit `app-config.json` to drop `AppClientId` → startup error dialog, app exits

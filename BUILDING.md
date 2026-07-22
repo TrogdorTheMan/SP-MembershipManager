@@ -171,3 +171,27 @@ When you bake a certificate into the EXE (`-CertPath`), the private key **and** 
 | **Plain** (no embedded cert) | `SP-MembershipManager.exe` + `app-config.json` + the `.pfx` certificate, all in one folder |
 
 See [Deploying to a new tenant](README.md#deploying-to-a-new-tenant) in the README for the first-run admin-consent step.
+
+---
+
+## Verify the build
+
+A build isn't done when `dotnet publish` succeeds — it's done when the EXE **demonstrably
+enforces what you baked into it**. Completing SETUP.md doesn't cover this: that guide only
+proves a from-source connection works, and none of the per-client features below are
+exercised by it.
+
+Run the acceptance tests in [docs/ACCEPTANCE-TESTS.md](docs/ACCEPTANCE-TESTS.md) that match
+what you built:
+
+| You built with | Verify with |
+|----------------|-------------|
+| No parameters (plain build) | AT-1 |
+| `-LockedAdminUrl` | AT-2 |
+| Embedded cert (`-CertPath`) | AT-3 (run the EXE alone in an empty folder) |
+| `-CriticalSiteUrls` / `-CriticalSiteGroupId` | AT-4 through AT-7 (needs a power-user and a standard-user sign-in) |
+| Gate (`-GateClientId` + `-GateGroupId`) | AT-8 (needs an account outside the gate group) |
+| The build wizard | AT-10 |
+
+The gate and critical-site tests are the security story of a per-client build — don't hand
+an EXE to a client on the assumption that they pass.
