@@ -194,6 +194,7 @@ registration client ID, which is baked in via `-AppClientId` (there is no
 1. Launch from source (`pwsh .\SP-MembershipManager.ps1`).
 
 **Pass:** Error dialog on startup: *"app-config.json is missing AppClientId..."* pointing at SETUP.md. App exits before any connection attempt. (Companion runtime guard: a self-contained EXE whose baked config lacks the value is caught after config merge with *"No app registration is configured..."* — build-time validation makes this unreachable via `build.ps1`, so it is defense in depth only.)
+- 07-21-26: Passes.
 
 ---
 
@@ -203,6 +204,7 @@ registration client ID, which is baked in via `-AppClientId` (there is no
 2. Fill in CertPath, CertPassword, and Tenant, but leave **App Client ID** blank. Click **Build**.
 
 **Pass:** Validation error: *"Certificate Password, Tenant, and App Client ID are required when a certificate is specified."* No build runs. (The `build.ps1` command-line half of this rule is Pester-covered in `tests/build.Tests.ps1`.)
+- 07-21-26: Passes. (Same session: caught and fixed the Build button sliding off the form — bottom anchors now assigned after final ClientSize.)
 
 ---
 
