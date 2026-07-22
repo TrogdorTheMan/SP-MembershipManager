@@ -710,8 +710,11 @@ function Test-CertAppConsent {
             WithCertificate($cert).
             WithAuthority("https://login.microsoftonline.com/$TenantName").
             Build()
-        # Derive the SharePoint root URL from the admin URL to use the correct scope
+        # Derive the SharePoint root URL from the admin URL to use the correct scope.
+        # The scope must carry a scheme: without it Entra rejects the token request
+        # with AADSTS70011, e.g. when the admin URL was entered without https://.
         $spRoot = $AdminUrl -replace '-admin\.sharepoint\.com.*$', '.sharepoint.com'
+        if ($spRoot -notmatch '^[a-z]+://') { $spRoot = "https://$spRoot" }
         $scopes = [string[]]@("$spRoot/.default")
         [void]$app.AcquireTokenForClient($scopes).ExecuteAsync().GetAwaiter().GetResult()
         return $null
@@ -902,6 +905,7 @@ function Get-UserTransitiveGroupMap {
 function Get-UserSiteMemberships {
     param(
         [string]$UserEmail,
+        [string]$UserUpn,
         [array]$AllSites,
         [System.Windows.Forms.RichTextBox]$LogBox,
         [hashtable]$UserGroupMap = @{}
@@ -913,7 +917,11 @@ function Get-UserSiteMemberships {
     }
 
     $scriptBlock = {
-        param($SiteTitle, $SiteUrl, $UserEmail, $ClientId, $CertPath, $CertPasswordPlain, $Tenant, $UserGroupMap)
+        param($SiteTitle, $SiteUrl, $UserEmail, $UserUpn, $ClientId, $CertPath, $CertPasswordPlain, $Tenant, $UserGroupMap)
+        # A site user is "this user" when their login claim matches the UPN. The email
+        # comparison is kept as a fallback but can't be the primary key: SP's Email field
+        # is empty for mailbox-less accounts and mail can differ from the UPN entirely.
+        $userLogin = "i:0#.f|membership|$UserUpn"
         # Each site is scanned with its OWN connection object (-ReturnConnection), and
         # every PnP call below is bound to it via -Connection. PnP's implicit "current
         # connection" is a process-global static; with parallel runspaces sharing one
@@ -959,7 +967,7 @@ function Get-UserSiteMemberships {
             # Checks both direct assignment (by LoginName) and assignment via Entra group.
             try {
                 $admins = Get-PnPSiteCollectionAdmin -Connection $conn
-                if ($admins | Where-Object { $_.Email -ieq $UserEmail -and $_.LoginName -like 'i:*' }) {
+                if ($admins | Where-Object { $_.LoginName -ieq $userLogin -or ($UserEmail -and $_.Email -ieq $UserEmail -and $_.LoginName -like 'i:*') }) {
                     & $AddGrant 'Admin' 'Site Admin'
                 }
                 if ($UserGroupMap -and $UserGroupMap.Count -gt 0) {
@@ -999,7 +1007,7 @@ function Get-UserSiteMemberships {
                 # This may be a true direct add OR an SP membership cache entry written when SP
                 # materializes nested Entra group members as individual user entries.
                 $appearsDirectly = ($members |
-                    Where-Object { $_.Email -ieq $UserEmail -and $_.LoginName -like 'i:*' } |
+                    Where-Object { $_.LoginName -ieq $userLogin -or ($UserEmail -and $_.Email -ieq $UserEmail -and $_.LoginName -like 'i:*') } |
                     Measure-Object).Count -gt 0
 
                 if ($entraGroupsHere.Count -gt 0) {
@@ -1009,7 +1017,7 @@ function Get-UserSiteMemberships {
                     # entries, making them look directly added when they are not).
                     try {
                         $checkBody   = (@{ groupIds = @($entraGroupsHere.Keys) } | ConvertTo-Json -Compress)
-                        $checkResult = Invoke-PnPGraphMethod -Url "users/$UserEmail/checkMemberGroups" -Method Post -Content $checkBody -Connection $conn
+                        $checkResult = Invoke-PnPGraphMethod -Url "users/$([Uri]::EscapeDataString($UserUpn))/checkMemberGroups" -Method Post -Content $checkBody -Connection $conn
                         foreach ($gid in $checkResult.value) {
                             if ($entraGroupsHere.ContainsKey($gid)) {
                                 & $AddGrant $role "via $($entraGroupsHere[$gid])"
@@ -1112,6 +1120,7 @@ function Get-UserSiteMemberships {
         [void]$ps.AddArgument($site.Title)
         [void]$ps.AddArgument($site.Url)
         [void]$ps.AddArgument($UserEmail)
+        [void]$ps.AddArgument($UserUpn)
         [void]$ps.AddArgument($script:AppClientId)
         [void]$ps.AddArgument($script:CertPath)
         [void]$ps.AddArgument($script:CertPasswordPlain)
@@ -1173,23 +1182,24 @@ function Get-UserSiteMemberships {
 }
 
 function Add-UserToSite {
-    param([string]$SiteUrl, [string]$UserEmail, [string]$Role)
+    param([string]$SiteUrl, [string]$UserUpn, [string]$Role)
     Connect-Site -Url $SiteUrl
     $groups = Get-PnPGroup
     $group  = $groups | Where-Object { $_.Title -like "* $Role`s" -or $_.Title -like "* ${Role}s" } | Select-Object -First 1
     if (-not $group) { throw "Could not find $Role group for site." }
-    # Use claims identity format to ensure the user is resolved correctly
-    # even if they haven't previously visited the site
-    Add-PnPGroupMember -Group $group -LoginName "i:0#.f|membership|$UserEmail"
+    # Claims identity built from the UPN, never the mail address: mail can differ
+    # from the UPN (custom domains) or be absent entirely (mailbox-less accounts),
+    # and SharePoint stores user logins by UPN.
+    Add-PnPGroupMember -Group $group -LoginName "i:0#.f|membership|$UserUpn"
 }
 
 function Remove-UserFromSite {
-    param([string]$SiteUrl, [string]$UserEmail, [string]$Role)
+    param([string]$SiteUrl, [string]$UserUpn, [string]$Role)
     Connect-Site -Url $SiteUrl
     $groups = Get-PnPGroup
     $group  = $groups | Where-Object { $_.Title -like "* $Role`s" -or $_.Title -like "* ${Role}s" } | Select-Object -First 1
     if (-not $group) { throw "Could not find $Role group for site." }
-    Remove-PnPGroupMember -Group $group -LoginName "i:0#.f|membership|$UserEmail"
+    Remove-PnPGroupMember -Group $group -LoginName "i:0#.f|membership|$UserUpn"
 }
 
 # ---------------------------------------------------------------------------
@@ -1735,7 +1745,7 @@ function Show-MainForm {
         try {
             & $SetStatus "Searching site access for $($u.DisplayName)..."
             $gm = Get-UserTransitiveGroupMap -UserUpn $u.Account
-            $script:Memberships = @(Get-UserSiteMemberships -UserEmail $u.Email -AllSites $script:AllSites -LogBox $rtbLog -UserGroupMap $gm)
+            $script:Memberships = @(Get-UserSiteMemberships -UserEmail $u.Email -UserUpn $u.Account -AllSites $script:AllSites -LogBox $rtbLog -UserGroupMap $gm)
             & $RefreshGrid
             $count      = $script:Memberships.Count
             $adminCount = @($script:Memberships | Where-Object { $_.Role -eq 'Admin' }).Count
@@ -1883,7 +1893,7 @@ function Show-MainForm {
             & $SetControlsBusy $true
             & $SetStatus "Adding $($script:SelectedUser.DisplayName) to $($site.Title) as $role..."
             try {
-                Add-UserToSite -SiteUrl $site.Url -UserEmail $script:SelectedUser.Email -Role $role
+                Add-UserToSite -SiteUrl $site.Url -UserUpn $script:SelectedUser.Account -Role $role
                 & $SetStatus "Added $($script:SelectedUser.DisplayName) to $($site.Title). Use Refresh to verify."
                 Show-CountdownDialog `
                     -Message "$($script:SelectedUser.DisplayName) was added to $($site.Title) as $role.`n`nSharePoint needs a moment to propagate the change. Wait for the countdown before refreshing." `
@@ -1918,7 +1928,7 @@ function Show-MainForm {
         & $SetStatus "Removing $($script:SelectedUser.DisplayName) from $($mem.SiteName)..."
         $removeError = $null
         try {
-            Remove-UserFromSite -SiteUrl $mem.SiteUrl -UserEmail $script:SelectedUser.Email -Role $mem.DirectRole
+            Remove-UserFromSite -SiteUrl $mem.SiteUrl -UserUpn $script:SelectedUser.Account -Role $mem.DirectRole
         } catch {
             $removeError = $_
         }

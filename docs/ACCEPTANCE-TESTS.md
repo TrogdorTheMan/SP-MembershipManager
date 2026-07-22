@@ -203,3 +203,30 @@ registration client ID, which is baked in via `-AppClientId` (there is no
 2. Fill in CertPath, CertPassword, and Tenant, but leave **App Client ID** blank. Click **Build**.
 
 **Pass:** Validation error: *"Certificate Password, Tenant, and App Client ID are required when a certificate is specified."* No build runs. (The `build.ps1` command-line half of this rule is Pester-covered in `tests/build.Tests.ps1`.)
+
+---
+
+## AT-14: Identity handling — mailbox-less and mail≠UPN accounts — 🔴 Manual
+
+Regression guard for the UPN identity fix (2026-07-21): the tool previously keyed adds,
+removes, and membership checks on the mail address, which broke for accounts with no
+mailbox (SharePoint's Email field is empty) and accounts whose mail domain differs from
+their UPN domain.
+
+**Setup:** Two Entra test users: (a) one with **no mailbox** (empty mail attribute),
+(b) one whose **mail address domain differs from their UPN domain** (e.g. mail
+`user@custowned.com`, UPN `user@yourtenant.onmicrosoft.com`).
+
+For **each** of the two users:
+
+1. Search for the user by name — they appear in results.
+2. Add them to a site as Member — success dialog.
+3. Refresh — **the site row appears** with Member role. (Old bug: user (a) showed
+   "no site access" even though the add succeeded in SharePoint.)
+4. If the site's groups include an Entra security group the user belongs to, the
+   "via <group>" source appears. (Old bug: the Graph membership check silently failed
+   for user (b).)
+5. Remove the direct access — succeeds, and the row is gone after refresh. (Old bug:
+   remove targeted the mail-based login, which doesn't exist for user (b).)
+
+**Pass:** Add, verify, and remove all work identically for both users.

@@ -27,6 +27,8 @@ Working notes for shipping v1.0.0. Delete this file once the release is tagged.
 - [ ] **AT-10**: full wizard build with cert produces a working EXE
 - [ ] **AT-12**: hand-edit `app-config.json` to drop `AppClientId` → startup error dialog, app exits
 - [ ] **AT-13**: wizard with cert but blank App Client ID → validation error, no build
+- [ ] **AT-14**: add/verify/remove works for a mailbox-less account AND a mail≠UPN account
+  (regression guard for the 07-21 UPN identity fix)
 - [ ] **Rotate app registration** — order matters: deleting the old registration kills it in
   every consented tenant at once, so it goes last
   - [ ] Create a fresh multitenant registration in the personal tenant by following SETUP.md
