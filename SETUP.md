@@ -260,6 +260,10 @@ everyone in the tenant, no per-user setup.
 
 ## Step 7 — Run it
 
+Run this **from a PowerShell 7 window** — don't double-click the `.ps1` in Explorer.
+(Windows hands double-clicked scripts to the old built-in PowerShell 5.1, which this tool
+doesn't support — the window just flashes and closes.)
+
 ```powershell
 .\SP-MembershipManager.ps1
 ```
@@ -352,6 +356,7 @@ The predictable snags, and what each one means:
 
 | What you see | What it means | Fix |
 |--------------|---------------|-----|
+| A terminal window flashes open and instantly closes, no error shown | The script was double-clicked, so it ran in the old Windows PowerShell 5.1 | Open **PowerShell 7** (`pwsh`), `cd` to the project folder, and run `.\SP-MembershipManager.ps1` from there (Step 7) |
 | *"…is not digitally signed"* or *"running scripts is disabled"* | Windows blocked the downloaded files | From the project folder run `Get-ChildItem -Recurse \| Unblock-File`, then relaunch (see Step 1) |
 | Authorization/permission error right after granting consent | Consent hasn't propagated yet | Nothing is wrong — wait ~5 minutes and relaunch |
 | *"app-config.json is missing AppClientId"* | The `AppClientId` field is empty | Paste your app registration's Application (client) ID — just the GUID (Step 5) |
