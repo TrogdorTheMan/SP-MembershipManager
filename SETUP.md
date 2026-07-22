@@ -221,10 +221,13 @@ the optional sign-in gate, covered at the end):
 - **`CertificatePath`** — path to your `.pfx`. `.\sp-mm.pfx` is right if it's in the same
   folder. The doubled backslash (`.\\sp-mm.pfx`) is **not a typo** — JSON uses `\` as an
   escape character, so every backslash in a path has to be written twice.
-- **`CertificatePassword`** — the plaintext password from Step 3. This is temporary: on the
-  first successful connect the tool encrypts it with Windows DPAPI and overwrites this field
-  with a ciphertext blob, and flips `CertificatePasswordEncrypted` to `true`. The plaintext
-  never stays on disk.
+- **`CertificatePassword`** — yes, type the real password from Step 3 here, as plain text.
+  It doesn't stay that way: on the first successful connect the tool encrypts it with
+  Windows DPAPI, overwrites this field with the encrypted version, and flips
+  `CertificatePasswordEncrypted` to `true` on its own. Leave that flag set to `false` —
+  it describes what's in the field right now (plaintext), and the tool manages it from
+  there. Setting it to `true` by hand would make the tool try to decrypt your plaintext
+  and fail.
 - **`Tenant`** — your tenant's `.onmicrosoft.com` name, e.g. `contoso.onmicrosoft.com`.
   Not sure what yours is? In the portal, search for **Microsoft Entra ID** and look at
   **Overview → Primary domain**. If your org signs in with a custom domain (e.g.
