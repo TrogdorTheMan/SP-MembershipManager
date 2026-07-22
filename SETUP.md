@@ -219,7 +219,8 @@ the optional sign-in gate, covered at the end):
   set it.) Paste **just the GUID — no `<` `>` brackets**. A finished value looks like:
   `"AppClientId": "a1b2c3d4-0000-1111-2222-333344445555"`
 - **`CertificatePath`** — path to your `.pfx`. `.\sp-mm.pfx` is right if it's in the same
-  folder.
+  folder. The doubled backslash (`.\\sp-mm.pfx`) is **not a typo** — JSON uses `\` as an
+  escape character, so every backslash in a path has to be written twice.
 - **`CertificatePassword`** — the plaintext password from Step 3. This is temporary: on the
   first successful connect the tool encrypts it with Windows DPAPI and overwrites this field
   with a ciphertext blob, and flips `CertificatePasswordEncrypted` to `true`. The plaintext
