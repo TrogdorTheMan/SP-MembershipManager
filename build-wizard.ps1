@@ -153,10 +153,6 @@ $rtbOutput.ForeColor = [System.Drawing.Color]::LightGreen
 $rtbOutput.Font      = New-Object System.Drawing.Font('Consolas', 9)
 $rtbOutput.Location  = New-Object System.Drawing.Point($pad, $script:y)
 $rtbOutput.Size      = New-Object System.Drawing.Size(($clientW - $pad * 2), 120)
-$rtbOutput.Anchor    = [System.Windows.Forms.AnchorStyles]::Top -bor
-                       [System.Windows.Forms.AnchorStyles]::Bottom -bor
-                       [System.Windows.Forms.AnchorStyles]::Left -bor
-                       [System.Windows.Forms.AnchorStyles]::Right
 $form.Controls.Add($rtbOutput)
 $script:y += 120 + $gap + 4
 
@@ -164,12 +160,23 @@ $btnBuild          = New-Object System.Windows.Forms.Button
 $btnBuild.Text     = "Build"
 $btnBuild.Size     = New-Object System.Drawing.Size(100, 30)
 $btnBuild.Location = New-Object System.Drawing.Point(($clientW - $pad - 100), $script:y)
-$btnBuild.Anchor   = [System.Windows.Forms.AnchorStyles]::Bottom -bor [System.Windows.Forms.AnchorStyles]::Right
 $form.Controls.Add($btnBuild)
 
 $form.ClientSize   = New-Object System.Drawing.Size($clientW, ($script:y + 30 + $pad))
 # Don't let the window shrink below the fully laid-out size.
 $form.MinimumSize  = $form.Size
+
+# Bottom anchors are assigned only AFTER the final ClientSize above: an anchor
+# captures the control's distance from the form edge at assignment time, so
+# anchoring before the resize shifts controls by the size delta — adding the
+# App Client ID row grew the layout past the provisional height and slid the
+# Build button clean off the bottom of the window.
+$rtbOutput.Anchor = [System.Windows.Forms.AnchorStyles]::Top -bor
+                    [System.Windows.Forms.AnchorStyles]::Bottom -bor
+                    [System.Windows.Forms.AnchorStyles]::Left -bor
+                    [System.Windows.Forms.AnchorStyles]::Right
+$btnBuild.Anchor  = [System.Windows.Forms.AnchorStyles]::Bottom -bor
+                    [System.Windows.Forms.AnchorStyles]::Right
 
 $btnBuild.Add_Click({
     $rtbOutput.Clear()
