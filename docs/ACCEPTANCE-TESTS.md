@@ -230,3 +230,4 @@ For **each** of the two users:
    remove targeted the mail-based login, which doesn't exist for user (b).)
 
 **Pass:** Add, verify, and remove all work identically for both users.
+- 07-21-26: Passes — verified same day as the fix with a mailbox-less account (ccitest) and a mail≠UPN account (toni): add, refresh shows the row, and remove all behave correctly for both.

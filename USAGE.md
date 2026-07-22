@@ -38,6 +38,10 @@ Rows highlighted in **light red** are critical sites designated when the tool wa
 
 You can only remove access that is directly assigned. If the Access column shows only group or admin sources, the Remove button will be disabled. To remove group-based access, the security group membership itself needs to change.
 
+### Site collection administrators can't be granted (or removed) with this tool
+
+The Add dialog offers **Member**, **Owner**, and **Visitor** — these correspond to a site's three standard SharePoint groups, which is what this tool manages. **Site collection administrator** is a different kind of assignment that lives outside those groups. The tool *shows* site admins (amber rows, "Site Admin" in the Access column) but cannot grant or revoke that role — use the SharePoint admin center (**Sites → Active sites → [site] → Membership → Site admins**) for that.
+
 ### PnP.PowerShell installs on first run
 
 The tool requires the PnP.PowerShell module. If it is not already installed on the machine, the tool will install it automatically before connecting. This is a one-time step and may take a minute or two the first time.

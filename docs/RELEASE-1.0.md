@@ -15,31 +15,31 @@ Working notes for shipping v1.0.0. Delete this file once the release is tagged.
 
 ## Remaining (needs the main PC — real .pfx + tenant values live there)
 
-- [ ] **Build A** (fully loaded): cert + tenant + `-LockedAdminUrl` + gate + critical sites
-  - [ ] AT-2 locked admin URL (read-only prompt)
-  - [ ] AT-3 self-contained EXE in empty folder
-  - [ ] AT-4 critical row red (power user sign-in)
-  - [ ] AT-5 power user can manage critical row
-  - [ ] AT-6 standard user blocked on critical row (buttons disabled + warning)
-  - [ ] AT-7 standard user unaffected on normal rows
-  - [ ] AT-8 outsider gets Access Denied (gate from baked config)
+- [x] **Build A** (fully loaded): cert + tenant + `-LockedAdminUrl` + gate + critical sites
+  - [x] AT-2 locked admin URL (read-only prompt)
+  - [x] AT-3 self-contained EXE in empty folder
+  - [x] AT-4 critical row red (power user sign-in)
+  - [x] AT-5 power user can manage critical row
+  - [x] AT-6 standard user blocked on critical row (buttons disabled + warning)
+  - [x] AT-7 standard user unaffected on normal rows
+  - [x] AT-8 outsider gets Access Denied (gate from baked config)
 - [ ] **AT-1 remainder** (unconfigured build): confirm a user *without* access is denied
 - [ ] **AT-10**: full wizard build with cert produces a working EXE
 - [ ] **AT-12**: hand-edit `app-config.json` to drop `AppClientId` → startup error dialog, app exits
 - [ ] **AT-13**: wizard with cert but blank App Client ID → validation error, no build
-- [ ] **AT-14**: add/verify/remove works for a mailbox-less account AND a mail≠UPN account
+- [x] **AT-14**: add/verify/remove works for a mailbox-less account AND a mail≠UPN account
   (regression guard for the 07-21 UPN identity fix)
-- [ ] **Rotate app registration** — order matters: deleting the old registration kills it in
+- [x] **Rotate app registration** — order matters: deleting the old registration kills it in
   every consented tenant at once, so it goes last
-  - [ ] Create a fresh multitenant registration in the personal tenant by following SETUP.md
+  - [x] Create a fresh multitenant registration in the personal tenant by following SETUP.md
     Part A verbatim (doubles as the SETUP.md acceptance pass); reuse the existing PFX
-  - [ ] Set the new `AppClientId` in local `app-config.json`; smoke-test a from-source launch
-  - [ ] Each deployed tenant: Global Admin re-consents to the new client ID (SETUP.md Part B
+  - [x] Set the new `AppClientId` in local `app-config.json`; smoke-test a from-source launch
+  - [x] Each deployed tenant: Global Admin re-consents to the new client ID (SETUP.md Part B
     or the first-run consent flow); rebuild/redeliver their EXE with the new `-AppClientId`
     (or update their `app-config.json`)
-  - [ ] Only once every tenant is on the new ID: delete the old registration in Entra — the
+  - [x] Only once every tenant is on the new ID: delete the old registration in Entra — the
     client ID in old git history becomes a dead identifier
-  - [ ] Log any SETUP.md friction found along the way as doc fixes
+  - [x] Log any SETUP.md friction found along the way as doc fixes
 - [ ] Record pass dates in `docs/ACCEPTANCE-TESTS.md`
 - [ ] Tag and push: `git tag v1.0.0 && git push origin main v1.0.0`
 - [ ] Optional: GitHub Release from the tag — **source/tag only**; never attach a configured EXE (they bake tenant config and certs)
