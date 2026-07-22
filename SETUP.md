@@ -132,7 +132,12 @@ The consent step (Step 6) sends the admin to a small "you're all set" web page a
 approve. That page's address has to be registered on your app or Entra will reject the
 redirect.
 
-1. Go to **Authentication → + Add a platform → Web**, and add this redirect URI:
+1. Go to **Authentication**. The portal has two versions of this page, and which one you
+   get varies — the steps differ slightly:
+   - **New experience** (page titled *Authentication (Preview)*, with a "new and improved
+     experience" banner): on the **Redirect URI configuration** tab, click
+     **Add Redirect URI**, pick **Web** as the platform, and paste the URI below.
+   - **Classic experience**: click **+ Add a platform → Web** and paste the URI below.
 
    ```
    https://trogdortheman.github.io/SP-MembershipManager/consent-complete.html
@@ -142,7 +147,7 @@ redirect.
    you'd rather host your own, change the `redirect_uri` in the consent URL that
    `SP-MembershipManager.ps1` builds — search the script for `consent-complete.html` — and
    register your own URL here instead.)
-2. Click **Save.**
+2. Confirm/save, and check the URI now appears in the redirect URI list.
 
 ## Step 3 — Generate a certificate
 
